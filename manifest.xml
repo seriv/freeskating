@@ -1,0 +1,22 @@
+<iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
+    <iq:application
+        entry="FreeskateApp"
+        type="watch-app"
+        id="b69523a3-f3e5-4a1d-8fb0-05a9a48c6a14"
+        name="@Strings.AppName"
+        launcherIcon="@Drawables.LauncherIcon"
+        minSdkVersion="5.0.1">
+        <iq:products>
+            <iq:product id="enduro3"/>
+        </iq:products>
+        <iq:permissions>
+            <iq:uses-permission id="Positioning"/>
+            <iq:uses-permission id="Fit"/>
+            <iq:uses-permission id="FitContributor"/>
+            <iq:uses-permission id="UserProfile"/>
+        </iq:permissions>
+        <iq:languages>
+            <iq:language>eng</iq:language>
+        </iq:languages>
+    </iq:application>
+</iq:manifest>
