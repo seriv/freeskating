@@ -3,6 +3,7 @@ using Toybox.Graphics;
 using Toybox.Lang;
 using Toybox.Timer;
 using Toybox.Activity;
+using Toybox.System;
 
 class FreeskateView extends WatchUi.View {
 
@@ -61,8 +62,11 @@ class FreeskateView extends WatchUi.View {
         var seconds = elapsedSeconds % 60;
         var timeStr = Lang.format("$1$:$2$:$3$", [hours.format("%01d"), minutes.format("%02d"), seconds.format("%02d")]);
 
-        var distanceKm = distanceMeters / 1000.0;
-        var speedKmh = speedMps * 3.6;
+        var useStatute = System.getDeviceSettings().distanceUnits == System.UNIT_STATUTE;
+        var distanceVal = useStatute ? distanceMeters / 1609.344 : distanceMeters / 1000.0;
+        var speedVal = useStatute ? speedMps * 2.23694 : speedMps * 3.6;
+        var distanceUnitStr = useStatute ? " mi" : " km";
+        var speedUnitStr = useStatute ? " mph" : " km/h";
 
         var zoneIndex = mController.getCurrentZoneIndex();
         var zoneStr = (zoneIndex == null) ? "--" : (zoneIndex + 1).format("%d");
@@ -71,8 +75,8 @@ class FreeskateView extends WatchUi.View {
 
         dc.drawText(centerX, height * 0.11, Graphics.FONT_XTINY, stateLabel(state), Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(centerX, height * 0.22, Graphics.FONT_NUMBER_MEDIUM, timeStr, Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(centerX, height * 0.44, Graphics.FONT_MEDIUM, distanceKm.format("%.2f") + " km", Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(centerX, height * 0.57, Graphics.FONT_SMALL, speedKmh.format("%.1f") + " km/h", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(centerX, height * 0.44, Graphics.FONT_MEDIUM, distanceVal.format("%.2f") + distanceUnitStr, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(centerX, height * 0.57, Graphics.FONT_SMALL, speedVal.format("%.1f") + speedUnitStr, Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(centerX, height * 0.72, Graphics.FONT_MEDIUM, hr.format("%d") + " bpm  Z" + zoneStr, Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(centerX, height * 0.85, Graphics.FONT_XTINY, "Laps: " + mController.getLapCount().format("%d"), Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(centerX, height * 0.93, Graphics.FONT_XTINY, buttonHint(state), Graphics.TEXT_JUSTIFY_CENTER);
