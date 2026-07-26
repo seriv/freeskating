@@ -20,6 +20,7 @@ class FreeskateApp extends Application.AppBase {
         if (currentState == ActivityController.STATE_RECORDING || currentState == ActivityController.STATE_PAUSED) {
             mController.stopAndSave();
         }
+        mController.shutdownPositioning();
     }
 
     function getInitialView() as [WatchUi.Views] or [WatchUi.Views, WatchUi.InputDelegates] {

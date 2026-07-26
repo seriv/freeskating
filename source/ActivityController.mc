@@ -26,12 +26,18 @@ class ActivityController {
     private var mZoneField as FitContributor.Field?;
     private var mCurrentZoneIndex as Lang.Number?;
     private var mLapCount as Lang.Number = 0;
+    private var mGpsAccuracy as Lang.Number?;
 
     function initialize() {
         // Garmin-configured zones, not hardcoded thresholds -- boundaries are
         // [min1, max1, max2, max3, max4, max5] in bpm.
         mZoneBoundaries = UserProfile.getHeartRateZones(UserProfile.HR_ZONE_SPORT_GENERIC);
         mTimer = new Timer.Timer();
+
+        // Acquire GPS from launch, not just once recording starts, so the
+        // status indicator has something to show and a fix is ready (or
+        // close to it) by the time the user actually presses start.
+        Position.enableLocationEvents(Position.LOCATION_CONTINUOUS, method(:onPosition));
     }
 
     function getState() as Lang.Number {
@@ -44,6 +50,12 @@ class ActivityController {
 
     function getCurrentZoneIndex() as Lang.Number? {
         return mCurrentZoneIndex;
+    }
+
+    // A Position.Quality value (QUALITY_NOT_AVAILABLE..QUALITY_GOOD), or null
+    // before the first fix attempt reports in.
+    function getGpsAccuracy() as Lang.Number? {
+        return mGpsAccuracy;
     }
 
     // Live stats (elapsedTime, elapsedDistance, currentHeartRate, currentSpeed)
@@ -74,8 +86,6 @@ class ActivityController {
                 FitContributor.DATA_TYPE_UINT32,
                 { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s", :count => 5 }
             );
-
-            Position.enableLocationEvents(Position.LOCATION_CONTINUOUS, method(:onPosition));
         }
 
         if (mSession != null) {
@@ -114,7 +124,6 @@ class ActivityController {
                 mSession.stop();
             }
             mTimer.stop();
-            Position.enableLocationEvents(Position.LOCATION_DISABLE, null);
             if (mZoneField != null) {
                 mZoneField.setData(mZoneSeconds);
             }
@@ -130,16 +139,20 @@ class ActivityController {
                 mSession.stop();
             }
             mTimer.stop();
-            Position.enableLocationEvents(Position.LOCATION_DISABLE, null);
             mSession.discard();
             mSession = null;
         }
         state = STATE_READY;
     }
 
-    // Registration only -- the platform correlates enabled location events with
-    // the active Session automatically, so nothing needs to happen here.
+    // Called from FreeskateApp.onStop() when the app is actually exiting (not
+    // just backgrounding -- see AppBase.onStop() docs), to release GPS.
+    function shutdownPositioning() as Void {
+        Position.enableLocationEvents(Position.LOCATION_DISABLE, null);
+    }
+
     function onPosition(posInfo as Position.Info) as Void {
+        mGpsAccuracy = posInfo.accuracy;
     }
 
     function onTimerTick() as Void {

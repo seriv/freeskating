@@ -4,6 +4,7 @@ using Toybox.Lang;
 using Toybox.Timer;
 using Toybox.Activity;
 using Toybox.System;
+using Toybox.Position;
 
 class FreeskateView extends WatchUi.View {
 
@@ -73,6 +74,10 @@ class FreeskateView extends WatchUi.View {
 
         var state = mController.getState();
 
+        dc.setColor(gpsColor(mController.getGpsAccuracy()), Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle(centerX, height * 0.06, height * 0.02);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
+
         dc.drawText(centerX, height * 0.11, Graphics.FONT_XTINY, stateLabel(state), Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(centerX, height * 0.22, Graphics.FONT_NUMBER_MEDIUM, timeStr, Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(centerX, height * 0.44, Graphics.FONT_MEDIUM, distanceVal.format("%.2f") + distanceUnitStr, Graphics.TEXT_JUSTIFY_CENTER);
@@ -80,6 +85,18 @@ class FreeskateView extends WatchUi.View {
         dc.drawText(centerX, height * 0.72, Graphics.FONT_MEDIUM, hr.format("%d") + " bpm  Z" + zoneStr, Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(centerX, height * 0.85, Graphics.FONT_XTINY, "Laps: " + mController.getLapCount().format("%d"), Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(centerX, height * 0.93, Graphics.FONT_XTINY, buttonHint(state), Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    // Red until a fix attempt reports in, yellow for a weak/last-known fix,
+    // green once it's good enough to trust for distance/speed.
+    private function gpsColor(accuracy as Lang.Number?) as Graphics.ColorType {
+        if (accuracy == null || accuracy == Position.QUALITY_NOT_AVAILABLE) {
+            return Graphics.COLOR_RED;
+        }
+        if (accuracy == Position.QUALITY_USABLE || accuracy == Position.QUALITY_GOOD) {
+            return Graphics.COLOR_GREEN;
+        }
+        return Graphics.COLOR_YELLOW;
     }
 
     private function stateLabel(state as Lang.Number) as Lang.String {
