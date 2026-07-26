@@ -1,0 +1,5 @@
+<settings>
+    <setting propertyKey="@Properties.autoLapEnabled" title="@Strings.AutoLapTitle">
+        <settingConfig type="boolean" />
+    </setting>
+</settings>

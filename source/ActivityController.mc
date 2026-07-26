@@ -5,6 +5,8 @@ using Toybox.UserProfile;
 using Toybox.FitContributor;
 using Toybox.Timer;
 using Toybox.Lang;
+using Toybox.System;
+using Toybox.Application.Properties;
 
 // Owns the recording Session lifecycle, HR-zone time accounting, and the
 // custom FitContributor field. View/Delegate only ever call these methods.
@@ -27,6 +29,7 @@ class ActivityController {
     private var mCurrentZoneIndex as Lang.Number?;
     private var mLapCount as Lang.Number = 0;
     private var mGpsAccuracy as Lang.Number?;
+    private var mLastLapDistanceMeters as Lang.Float = 0.0;
 
     function initialize() {
         // Garmin-configured zones, not hardcoded thresholds -- boundaries are
@@ -73,6 +76,7 @@ class ActivityController {
             mLapCount = 0;
             mZoneSeconds = [0, 0, 0, 0, 0];
             mCurrentZoneIndex = null;
+            mLastLapDistanceMeters = 0.0;
 
             mSession = Recording.createSession({
                 :name => "Freeskate",
@@ -115,6 +119,12 @@ class ActivityController {
         if (mSession != null && mSession.isRecording()) {
             mSession.addLap();
             mLapCount += 1;
+            // Whether this lap was manual or automatic, the auto-lap distance
+            // countdown restarts from here.
+            var info = Activity.getActivityInfo();
+            if (info != null && info.elapsedDistance != null) {
+                mLastLapDistanceMeters = info.elapsedDistance as Lang.Float;
+            }
         }
     }
 
@@ -157,18 +167,42 @@ class ActivityController {
 
     function onTimerTick() as Void {
         var info = Activity.getActivityInfo();
-        if (info == null || info.currentHeartRate == null) {
+        if (info == null) {
             return;
         }
 
-        var hr = info.currentHeartRate as Lang.Number;
-        var zoneIndex = zoneIndexForHr(hr);
-        mCurrentZoneIndex = zoneIndex;
-        if (zoneIndex != null) {
-            mZoneSeconds[zoneIndex] = mZoneSeconds[zoneIndex] + 1;
-            if (mZoneField != null) {
-                mZoneField.setData(mZoneSeconds);
+        if (info.currentHeartRate != null) {
+            var hr = info.currentHeartRate as Lang.Number;
+            var zoneIndex = zoneIndexForHr(hr);
+            mCurrentZoneIndex = zoneIndex;
+            if (zoneIndex != null) {
+                mZoneSeconds[zoneIndex] = mZoneSeconds[zoneIndex] + 1;
+                if (mZoneField != null) {
+                    mZoneField.setData(mZoneSeconds);
+                }
             }
+        }
+
+        checkAutoLap(info);
+    }
+
+    // Auto-lap at 1 unit (km or mi, matching the system distance setting) --
+    // toggleable via the "Auto Lap" app setting in Garmin Connect Mobile.
+    // There's no built-in distance-based auto-lap in the Connect IQ SDK
+    // (ActivityRecording's :autoLap option only supports geofence entry/exit
+    // lines), so this tracks it manually against elapsedDistance.
+    private function checkAutoLap(info as Activity.Info) as Void {
+        if (info.elapsedDistance == null) {
+            return;
+        }
+        var autoLapEnabled = Properties.getValue("autoLapEnabled");
+        if (autoLapEnabled != true) {
+            return;
+        }
+        var elapsedDistance = info.elapsedDistance as Lang.Float;
+        var thresholdMeters = (System.getDeviceSettings().distanceUnits == System.UNIT_STATUTE) ? 1609.344 : 1000.0;
+        if (elapsedDistance - mLastLapDistanceMeters >= thresholdMeters) {
+            addLap();
         }
     }
 
