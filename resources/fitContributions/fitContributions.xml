@@ -1,0 +1,42 @@
+<!--
+    Chart/summary metadata for the FitContributor fields created in
+    ActivityController.mc (session.createField() ids must match these).
+    Without this, sideloaded builds still write the fields into the FIT
+    file correctly (confirmed via FitCSVTool), but tools that visualize
+    FitContributor data, such as MonkeyGraph and Garmin Connect once/if
+    this app is published to the store, have no chart/label config to
+    render them with.
+
+    hr_zone_seconds (id 0) is a 5 element array (seconds per HR zone for
+    the whole session), so displayInChart is a reasonable fit, since it's
+    inherently a small multi value breakdown, not a single scalar.
+    skate_seconds/other_seconds (ids 1/2) are each a single cumulative
+    total for the whole session, not a per second time series, so
+    displayInActivitySummary (a plain summary stat) fits them better than
+    displayInChart, which implies plotting a value over time and doesn't
+    apply here since there's only one final value per session.
+-->
+<resources xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
+    <fitContributions>
+        <fitField id="0"
+            displayInChart="true"
+            sortOrder="0"
+            precision="0"
+            chartTitle="@Strings.HrZoneSecondsLabel"
+            dataLabel="@Strings.HrZoneSecondsLabel"
+            unitLabel="@Strings.SecondsUnit"
+            fillColor="#FF8800" />
+        <fitField id="1"
+            displayInActivitySummary="true"
+            sortOrder="1"
+            precision="0"
+            dataLabel="@Strings.SkateSecondsLabel"
+            unitLabel="@Strings.SecondsUnit" />
+        <fitField id="2"
+            displayInActivitySummary="true"
+            sortOrder="2"
+            precision="0"
+            dataLabel="@Strings.OtherSecondsLabel"
+            unitLabel="@Strings.SecondsUnit" />
+    </fitContributions>
+</resources>

@@ -118,22 +118,29 @@ class ActivityController {
                 :subSport => Recording.SUB_SPORT_GENERIC
             });
 
+            // DATA_TYPE_FLOAT, not UINT32 -- confirmed via Garmin forum reports
+            // that MonkeyGraph/Connect show session-level integer
+            // FitContributor fields as "#VALUE?" but render float fields
+            // correctly; cause undocumented, but this matches the working
+            // fix reported there (paired with precision="0" in
+            // fitContributions.xml, which rounds the displayed value back
+            // to a whole number).
             mZoneField = mSession.createField(
                 "hr_zone_seconds",
                 0,
-                FitContributor.DATA_TYPE_UINT32,
+                FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s", :count => 5 }
             );
             mSkateField = mSession.createField(
                 "skate_seconds",
                 1,
-                FitContributor.DATA_TYPE_UINT32,
+                FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s" }
             );
             mOtherField = mSession.createField(
                 "other_seconds",
                 2,
-                FitContributor.DATA_TYPE_UINT32,
+                FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s" }
             );
         }

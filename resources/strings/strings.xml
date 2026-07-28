@@ -1,4 +1,8 @@
 <strings>
     <string id="AppName">Freeskate</string>
     <string id="AutoLapTitle">Auto Lap (1 km/mi)</string>
+    <string id="HrZoneSecondsLabel">HR Zone Seconds</string>
+    <string id="SkateSecondsLabel">Skate Seconds</string>
+    <string id="OtherSecondsLabel">Other Seconds</string>
+    <string id="SecondsUnit">s</string>
 </strings>
