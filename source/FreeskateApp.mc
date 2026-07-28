@@ -16,6 +16,9 @@ class FreeskateApp extends Application.AppBase {
 
     function onStop(state as Lang.Dictionary?) as Void {
         // Don't silently lose a session if the app gets killed mid-recording.
+        // A no-op when the pause menu's Save/Discard already ended the
+        // Session before calling System.exit() -- state is STOPPED/READY by
+        // then, not RECORDING/PAUSED, so this check correctly skips it.
         var currentState = mController.getState();
         if (currentState == ActivityController.STATE_RECORDING || currentState == ActivityController.STATE_PAUSED) {
             mController.stopAndSave();

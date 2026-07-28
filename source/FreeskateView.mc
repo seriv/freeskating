@@ -75,7 +75,9 @@ class FreeskateView extends WatchUi.View {
         var state = mController.getState();
 
         dc.setColor(gpsColor(mController.getGpsAccuracy()), Graphics.COLOR_TRANSPARENT);
-        dc.fillCircle(centerX, height * 0.06, height * 0.02);
+        dc.fillCircle(centerX - width * 0.08, height * 0.06, height * 0.02);
+        dc.setColor(skateColor(mController.getCurrentlySkating()), Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle(centerX + width * 0.08, height * 0.06, height * 0.02);
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
 
         dc.drawText(centerX, height * 0.11, Graphics.FONT_XTINY, stateLabel(state), Graphics.TEXT_JUSTIFY_CENTER);
@@ -99,6 +101,14 @@ class FreeskateView extends WatchUi.View {
         return Graphics.COLOR_YELLOW;
     }
 
+    // Green while classified as skating, dark gray otherwise (idle, walking,
+    // running) -- deliberately not red/yellow, since those already mean
+    // "bad/not-ready" for the GPS dot and "not currently skating" isn't an
+    // error condition.
+    private function skateColor(skating as Lang.Boolean) as Graphics.ColorType {
+        return skating ? Graphics.COLOR_GREEN : Graphics.COLOR_DK_GRAY;
+    }
+
     private function stateLabel(state as Lang.Number) as Lang.String {
         if (state == ActivityController.STATE_READY) {
             return "READY";
@@ -120,7 +130,7 @@ class FreeskateView extends WatchUi.View {
             return "Sel: pause  Bk: lap";
         }
         if (state == ActivityController.STATE_PAUSED) {
-            return "Sel: resume  Bk: save";
+            return "Sel: resume  Bk: menu";
         }
         return "Sel:new Bk:exit";
     }

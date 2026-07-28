@@ -1,5 +1,6 @@
 using Toybox.ActivityRecording as Recording;
 using Toybox.Activity;
+using Toybox.ActivityMonitor;
 using Toybox.Position;
 using Toybox.UserProfile;
 using Toybox.FitContributor;
@@ -10,6 +11,16 @@ using Toybox.Application.Properties;
 
 // Owns the recording Session lifecycle, HR-zone time accounting, and the
 // custom FitContributor field. View/Delegate only ever call these methods.
+//
+// A "Resume Later" option (leave the Session stop()'d but never save()'d/
+// discard()'d, then System.exit(), hoping to reclaim it via createSession()
+// on next launch per its "only one Session at a time" documented contract)
+// was tried and confirmed on real Enduro 3 hardware to NOT work: the watch's
+// own firmware auto-finalizes and uploads an orphaned session as a completed
+// activity as soon as the owning app process exits, regardless of what this
+// class does at the Monkey C level. There's no supported way to suspend a
+// Session across a real app exit -- stopAndSave()/discard() are the only two
+// ways a PAUSED recording ends.
 class ActivityController {
 
     enum {
@@ -18,6 +29,12 @@ class ActivityController {
         STATE_PAUSED,
         STATE_STOPPED
     }
+
+    // Rolling window (seconds) of ambient step count used to tell skating
+    // apart from walking/running -- see updateSkateClassification().
+    private const WINDOW_SECONDS = 8;
+    private const MOVING_SPEED_THRESHOLD_MPS = 0.5;
+    private const STEP_RATE_THRESHOLD_PER_MIN = 60.0;
 
     var state as Lang.Number = STATE_READY;
 
@@ -30,6 +47,15 @@ class ActivityController {
     private var mLapCount as Lang.Number = 0;
     private var mGpsAccuracy as Lang.Number?;
     private var mLastLapDistanceMeters as Lang.Float = 0.0;
+
+    private var mSkateSeconds as Lang.Number = 0;
+    private var mOtherSeconds as Lang.Number = 0;
+    private var mSkateField as FitContributor.Field?;
+    private var mOtherField as FitContributor.Field?;
+    private var mCurrentlySkating as Lang.Boolean = false;
+    // Cumulative step counts, one sample/sec, oldest first -- diffed to get
+    // a step rate over WINDOW_SECONDS.
+    private var mStepHistory as Lang.Array<Lang.Number> = [];
 
     function initialize() {
         // Garmin-configured zones, not hardcoded thresholds -- boundaries are
@@ -55,6 +81,10 @@ class ActivityController {
         return mCurrentZoneIndex;
     }
 
+    function getCurrentlySkating() as Lang.Boolean {
+        return mCurrentlySkating;
+    }
+
     // A Position.Quality value (QUALITY_NOT_AVAILABLE..QUALITY_GOOD), or null
     // before the first fix attempt reports in.
     function getGpsAccuracy() as Lang.Number? {
@@ -77,6 +107,10 @@ class ActivityController {
             mZoneSeconds = [0, 0, 0, 0, 0];
             mCurrentZoneIndex = null;
             mLastLapDistanceMeters = 0.0;
+            mSkateSeconds = 0;
+            mOtherSeconds = 0;
+            mCurrentlySkating = false;
+            mStepHistory = [];
 
             mSession = Recording.createSession({
                 :name => "Freeskate",
@@ -89,6 +123,18 @@ class ActivityController {
                 0,
                 FitContributor.DATA_TYPE_UINT32,
                 { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s", :count => 5 }
+            );
+            mSkateField = mSession.createField(
+                "skate_seconds",
+                1,
+                FitContributor.DATA_TYPE_UINT32,
+                { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s" }
+            );
+            mOtherField = mSession.createField(
+                "other_seconds",
+                2,
+                FitContributor.DATA_TYPE_UINT32,
+                { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s" }
             );
         }
 
@@ -109,6 +155,11 @@ class ActivityController {
 
     function resume() as Void {
         if (state == STATE_PAUSED && mSession != null) {
+            // The OS pedometer keeps counting through a pause, so a step
+            // window spanning the pause gap wouldn't represent the
+            // just-resumed activity -- force a brief, safe-default
+            // re-warm-up instead (see updateSkateClassification()).
+            mStepHistory = [];
             mSession.start();
             mTimer.start(method(:onTimerTick), 1000, true);
             state = STATE_RECORDING;
@@ -136,6 +187,12 @@ class ActivityController {
             mTimer.stop();
             if (mZoneField != null) {
                 mZoneField.setData(mZoneSeconds);
+            }
+            if (mSkateField != null) {
+                mSkateField.setData(mSkateSeconds);
+            }
+            if (mOtherField != null) {
+                mOtherField.setData(mOtherSeconds);
             }
             mSession.save();
             mSession = null;
@@ -183,7 +240,54 @@ class ActivityController {
             }
         }
 
+        updateSkateClassification(info);
         checkAutoLap(info);
+    }
+
+    // Distinguishes actual skating from anything else (standing, sitting,
+    // walking, running) using GPS speed plus the device's always-on ambient
+    // pedometer -- deliberately not raw accelerometer/Toybox.Sensor, matching
+    // this project's existing preference for simple, empirically-tunable
+    // heuristics over signal processing that's hard to validate quickly.
+    // Never touches lap or pause logic (see checkAutoLap()), so however
+    // noisy this classification turns out to be in practice, it cannot
+    // produce spurious laps or auto-pauses -- it only ever feeds the
+    // skate_seconds/other_seconds FIT fields and the on-screen dot.
+    private function updateSkateClassification(info as Activity.Info) as Void {
+        var monitorInfo = ActivityMonitor.getInfo();
+        var steps = (monitorInfo != null) ? monitorInfo.steps : null;
+
+        if (steps != null) {
+            mStepHistory.add(steps);
+            while (mStepHistory.size() > WINDOW_SECONDS + 1) {
+                mStepHistory.remove(mStepHistory[0]);
+            }
+        }
+
+        var speed = (info.currentSpeed != null) ? (info.currentSpeed as Lang.Float) : 0.0;
+
+        if (speed < MOVING_SPEED_THRESHOLD_MPS) {
+            mCurrentlySkating = false;
+        } else if (mStepHistory.size() < 2) {
+            mCurrentlySkating = false;
+        } else {
+            var elapsedWindowSeconds = mStepHistory.size() - 1;
+            var stepDelta = mStepHistory[mStepHistory.size() - 1] - mStepHistory[0];
+            var stepRatePerMin = stepDelta * 60.0 / elapsedWindowSeconds;
+            mCurrentlySkating = (stepRatePerMin < STEP_RATE_THRESHOLD_PER_MIN);
+        }
+
+        if (mCurrentlySkating) {
+            mSkateSeconds += 1;
+        } else {
+            mOtherSeconds += 1;
+        }
+        if (mSkateField != null) {
+            mSkateField.setData(mSkateSeconds);
+        }
+        if (mOtherField != null) {
+            mOtherField.setData(mOtherSeconds);
+        }
     }
 
     // Auto-lap at 1 unit (km or mi, matching the system distance setting) --
