@@ -69,6 +69,18 @@ class FreeskateView extends WatchUi.View {
         var distanceUnitStr = useStatute ? " mi" : " km";
         var speedUnitStr = useStatute ? " mph" : " km/h";
 
+        var skateDistanceVal = useStatute
+            ? mController.getSkateDistanceMeters() / 1609.344
+            : mController.getSkateDistanceMeters() / 1000.0;
+        var avgSkateSpeedMps = mController.getAverageSkateSpeedMps();
+        var avgSkateSpeedStr = "--";
+        if (avgSkateSpeedMps != null) {
+            var avgSkateSpeedVal = useStatute
+                ? (avgSkateSpeedMps as Lang.Float) * 2.23694
+                : (avgSkateSpeedMps as Lang.Float) * 3.6;
+            avgSkateSpeedStr = avgSkateSpeedVal.format("%.1f") + speedUnitStr;
+        }
+
         var zoneIndex = mController.getCurrentZoneIndex();
         var zoneStr = (zoneIndex == null) ? "--" : (zoneIndex + 1).format("%d");
 
@@ -82,9 +94,11 @@ class FreeskateView extends WatchUi.View {
 
         dc.drawText(centerX, height * 0.11, Graphics.FONT_XTINY, stateLabel(state), Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(centerX, height * 0.22, Graphics.FONT_NUMBER_MEDIUM, timeStr, Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(centerX, height * 0.44, Graphics.FONT_MEDIUM, distanceVal.format("%.2f") + distanceUnitStr, Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(centerX, height * 0.57, Graphics.FONT_SMALL, speedVal.format("%.1f") + speedUnitStr, Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(centerX, height * 0.72, Graphics.FONT_MEDIUM, hr.format("%d") + " bpm  Z" + zoneStr, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(centerX, height * 0.38, Graphics.FONT_MEDIUM, distanceVal.format("%.2f") + distanceUnitStr, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(centerX, height * 0.45, Graphics.FONT_XTINY, "Skt dist: " + skateDistanceVal.format("%.2f") + distanceUnitStr, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(centerX, height * 0.55, Graphics.FONT_SMALL, speedVal.format("%.1f") + speedUnitStr, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(centerX, height * 0.62, Graphics.FONT_XTINY, "Avg skt: " + avgSkateSpeedStr, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(centerX, height * 0.74, Graphics.FONT_MEDIUM, hr.format("%d") + " bpm  Z" + zoneStr, Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(centerX, height * 0.85, Graphics.FONT_XTINY, "Laps: " + mController.getLapCount().format("%d"), Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(centerX, height * 0.93, Graphics.FONT_XTINY, buttonHint(state), Graphics.TEXT_JUSTIFY_CENTER);
     }

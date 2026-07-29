@@ -1,6 +1,5 @@
 using Toybox.ActivityRecording as Recording;
 using Toybox.Activity;
-using Toybox.ActivityMonitor;
 using Toybox.Position;
 using Toybox.UserProfile;
 using Toybox.FitContributor;
@@ -30,11 +29,18 @@ class ActivityController {
         STATE_STOPPED
     }
 
-    // Rolling window (seconds) of ambient step count used to tell skating
-    // apart from walking/running -- see updateSkateClassification().
-    private const WINDOW_SECONDS = 8;
-    private const MOVING_SPEED_THRESHOLD_MPS = 0.5;
-    private const STEP_RATE_THRESHOLD_PER_MIN = 60.0;
+    // GPS speed threshold distinguishing skating from everything else -- see
+    // updateSkateClassification(). Calibrated empirically from a real ride
+    // with lap markers pressed at every skate/walk transition: the 4
+    // lap-bounded skating segments averaged 2.04-3.09 m/s, the 6 walking
+    // segments averaged 0.06-1.37 m/s, a clean gap with no overlap. An
+    // ambient-step-count-based and the device's own native cadence-based
+    // heuristic were both tried first and confirmed (on two separate real
+    // rides) to NOT separate skating from walking at all -- freeskate
+    // pumping/carving motion gets picked up as step/cadence-like signal on
+    // this device, so cadence-based approaches misclassified the majority
+    // of actual skating time as "not skating."
+    private const SKATING_SPEED_THRESHOLD_MPS = 1.6;
 
     var state as Lang.Number = STATE_READY;
 
@@ -53,9 +59,22 @@ class ActivityController {
     private var mSkateField as FitContributor.Field?;
     private var mOtherField as FitContributor.Field?;
     private var mCurrentlySkating as Lang.Boolean = false;
-    // Cumulative step counts, one sample/sec, oldest first -- diffed to get
-    // a step rate over WINDOW_SECONDS.
-    private var mStepHistory as Lang.Array<Lang.Number> = [];
+
+    // Distance covered while skating -- mSkateDistanceMeters is a running
+    // session total (for the live watch display, which should keep growing
+    // over the whole ride rather than resetting); mLapSkateDistanceMeters is
+    // the same thing but reset at each lap boundary, feeding a MESG_TYPE_LAP
+    // field so Garmin Connect/MonkeyGraph can show a per-lap breakdown.
+    private var mSkateDistanceMeters as Lang.Float = 0.0;
+    private var mLapSkateDistanceMeters as Lang.Float = 0.0;
+    private var mPreviousDistanceMeters as Lang.Float = 0.0;
+    private var mLapSkateDistanceField as FitContributor.Field?;
+    // Speed split into two record-level fields (nonzero only in their own
+    // state, zero otherwise) as an approximation of a single color-coded
+    // speed graph, since Garmin Connect's built-in Speed chart has no
+    // customization hook for third-party developer fields.
+    private var mSkateSpeedField as FitContributor.Field?;
+    private var mWalkSpeedField as FitContributor.Field?;
 
     function initialize() {
         // Garmin-configured zones, not hardcoded thresholds -- boundaries are
@@ -85,6 +104,19 @@ class ActivityController {
         return mCurrentlySkating;
     }
 
+    function getSkateDistanceMeters() as Lang.Float {
+        return mSkateDistanceMeters;
+    }
+
+    // Average speed while actually skating, ignoring walking/idle time --
+    // null until at least one skating second has been recorded.
+    function getAverageSkateSpeedMps() as Lang.Float? {
+        if (mSkateSeconds <= 0) {
+            return null;
+        }
+        return mSkateDistanceMeters / mSkateSeconds.toFloat();
+    }
+
     // A Position.Quality value (QUALITY_NOT_AVAILABLE..QUALITY_GOOD), or null
     // before the first fix attempt reports in.
     function getGpsAccuracy() as Lang.Number? {
@@ -110,7 +142,9 @@ class ActivityController {
             mSkateSeconds = 0;
             mOtherSeconds = 0;
             mCurrentlySkating = false;
-            mStepHistory = [];
+            mSkateDistanceMeters = 0.0;
+            mLapSkateDistanceMeters = 0.0;
+            mPreviousDistanceMeters = 0.0;
 
             mSession = Recording.createSession({
                 :name => "Freeskate",
@@ -143,6 +177,24 @@ class ActivityController {
                 FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s" }
             );
+            mLapSkateDistanceField = mSession.createField(
+                "lap_skate_distance",
+                3,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_LAP, :units => "m" }
+            );
+            mSkateSpeedField = mSession.createField(
+                "skate_speed",
+                4,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
+            );
+            mWalkSpeedField = mSession.createField(
+                "walk_speed",
+                5,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
+            );
         }
 
         if (mSession != null) {
@@ -162,11 +214,6 @@ class ActivityController {
 
     function resume() as Void {
         if (state == STATE_PAUSED && mSession != null) {
-            // The OS pedometer keeps counting through a pause, so a step
-            // window spanning the pause gap wouldn't represent the
-            // just-resumed activity -- force a brief, safe-default
-            // re-warm-up instead (see updateSkateClassification()).
-            mStepHistory = [];
             mSession.start();
             mTimer.start(method(:onTimerTick), 1000, true);
             state = STATE_RECORDING;
@@ -175,6 +222,9 @@ class ActivityController {
 
     function addLap() as Void {
         if (mSession != null && mSession.isRecording()) {
+            // session.addLap() captures each field's current value into the
+            // just-completed Lap message -- reset the accumulator right
+            // after, so it starts fresh for the new lap.
             mSession.addLap();
             mLapCount += 1;
             // Whether this lap was manual or automatic, the auto-lap distance
@@ -182,6 +232,10 @@ class ActivityController {
             var info = Activity.getActivityInfo();
             if (info != null && info.elapsedDistance != null) {
                 mLastLapDistanceMeters = info.elapsedDistance as Lang.Float;
+            }
+            mLapSkateDistanceMeters = 0.0;
+            if (mLapSkateDistanceField != null) {
+                mLapSkateDistanceField.setData(mLapSkateDistanceMeters);
             }
         }
     }
@@ -252,36 +306,27 @@ class ActivityController {
     }
 
     // Distinguishes actual skating from anything else (standing, sitting,
-    // walking, running) using GPS speed plus the device's always-on ambient
-    // pedometer -- deliberately not raw accelerometer/Toybox.Sensor, matching
-    // this project's existing preference for simple, empirically-tunable
-    // heuristics over signal processing that's hard to validate quickly.
+    // walking, running) using GPS speed alone -- see
+    // SKATING_SPEED_THRESHOLD_MPS for the calibration data behind this.
     // Never touches lap or pause logic (see checkAutoLap()), so however
     // noisy this classification turns out to be in practice, it cannot
     // produce spurious laps or auto-pauses -- it only ever feeds the
-    // skate_seconds/other_seconds FIT fields and the on-screen dot.
+    // skate_seconds/other_seconds FIT fields and the on-screen dot. Known
+    // limitation, accepted for v1: running at a jogging pace or faster
+    // would also read as "skating" here, since speed alone can't tell
+    // gait-based movement from skating apart above that threshold.
     private function updateSkateClassification(info as Activity.Info) as Void {
-        var monitorInfo = ActivityMonitor.getInfo();
-        var steps = (monitorInfo != null) ? monitorInfo.steps : null;
-
-        if (steps != null) {
-            mStepHistory.add(steps);
-            while (mStepHistory.size() > WINDOW_SECONDS + 1) {
-                mStepHistory.remove(mStepHistory[0]);
-            }
-        }
-
         var speed = (info.currentSpeed != null) ? (info.currentSpeed as Lang.Float) : 0.0;
+        mCurrentlySkating = (speed >= SKATING_SPEED_THRESHOLD_MPS);
 
-        if (speed < MOVING_SPEED_THRESHOLD_MPS) {
-            mCurrentlySkating = false;
-        } else if (mStepHistory.size() < 2) {
-            mCurrentlySkating = false;
-        } else {
-            var elapsedWindowSeconds = mStepHistory.size() - 1;
-            var stepDelta = mStepHistory[mStepHistory.size() - 1] - mStepHistory[0];
-            var stepRatePerMin = stepDelta * 60.0 / elapsedWindowSeconds;
-            mCurrentlySkating = (stepRatePerMin < STEP_RATE_THRESHOLD_PER_MIN);
+        if (info.elapsedDistance != null) {
+            var currentDistance = info.elapsedDistance as Lang.Float;
+            var delta = currentDistance - mPreviousDistanceMeters;
+            if (mCurrentlySkating && delta > 0) {
+                mSkateDistanceMeters += delta;
+                mLapSkateDistanceMeters += delta;
+            }
+            mPreviousDistanceMeters = currentDistance;
         }
 
         if (mCurrentlySkating) {
@@ -294,6 +339,15 @@ class ActivityController {
         }
         if (mOtherField != null) {
             mOtherField.setData(mOtherSeconds);
+        }
+        if (mLapSkateDistanceField != null) {
+            mLapSkateDistanceField.setData(mLapSkateDistanceMeters);
+        }
+        if (mSkateSpeedField != null) {
+            mSkateSpeedField.setData(mCurrentlySkating ? speed : 0.0);
+        }
+        if (mWalkSpeedField != null) {
+            mWalkSpeedField.setData(mCurrentlySkating ? 0.0 : speed);
         }
     }
 

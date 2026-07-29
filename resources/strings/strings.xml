@@ -5,4 +5,9 @@
     <string id="SkateSecondsLabel">Skate Seconds</string>
     <string id="OtherSecondsLabel">Other Seconds</string>
     <string id="SecondsUnit">s</string>
+    <string id="LapSkateDistanceLabel">Lap Skate Distance</string>
+    <string id="SkateSpeedLabel">Skate Speed</string>
+    <string id="WalkSpeedLabel">Walk Speed</string>
+    <string id="MetersUnit">m</string>
+    <string id="SpeedUnit">m/s</string>
 </strings>
