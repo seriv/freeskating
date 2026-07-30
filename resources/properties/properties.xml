@@ -1,3 +1,9 @@
 <properties>
     <property id="autoLapEnabled" type="boolean">true</property>
+    <!-- Starting guess for the grade-adjusted-speed multiplier (see
+         ActivityController.updateGradeAndGap()), deliberately steep since
+         caster-based pumping mechanics hit a hard grade ceiling much sooner
+         than running/cycling effort curves do. Meant to be tuned from real
+         ride data via Settings, not treated as a derived constant. -->
+    <property id="gradeAdjustCoefficient" type="float">5.0</property>
 </properties>

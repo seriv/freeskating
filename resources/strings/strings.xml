@@ -10,4 +10,8 @@
     <string id="WalkSpeedLabel">Walk Speed</string>
     <string id="MetersUnit">m</string>
     <string id="SpeedUnit">m/s</string>
+    <string id="GradeAdjustCoefficientTitle">Grade Adjust Coefficient</string>
+    <string id="GradePercentLabel">Grade</string>
+    <string id="GradeAdjustedSpeedLabel">Grade-Adjusted Speed</string>
+    <string id="PercentUnit">%</string>
 </strings>

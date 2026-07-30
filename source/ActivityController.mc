@@ -102,11 +102,29 @@ class ActivityController {
     private var mSkateSpeedField as FitContributor.Field?;
     private var mWalkSpeedField as FitContributor.Field?;
 
+    // Grade (smoothed % slope, from altitude/distance history) and a
+    // rider-tunable grade-adjusted speed, recorded per second so a ride's
+    // grade/speed/HR can be correlated afterwards to calibrate the
+    // "gradeAdjustCoefficient" setting against real data. Deliberately not
+    // a fixed formula: running's published grade-adjusted-pace curves don't
+    // transfer to caster-based pumping mechanics (see project discussion),
+    // so this starts as a rough linear guess meant to be refined per-rider.
+    private const GRADE_WINDOW_SECONDS = 15;
+    private var mDistanceHistory as Lang.Array<Lang.Float?>?;
+    private var mAltitudeHistory as Lang.Array<Lang.Float?>?;
+    private var mHistoryIndex as Lang.Number = 0;
+    private var mHistoryCount as Lang.Number = 0;
+    private var mCurrentGradePercent as Lang.Float = 0.0;
+    private var mGradeField as FitContributor.Field?;
+    private var mGapSpeedField as FitContributor.Field?;
+
     function initialize() {
         // Garmin-configured zones, not hardcoded thresholds -- boundaries are
         // [min1, max1, max2, max3, max4, max5] in bpm.
         mZoneBoundaries = UserProfile.getHeartRateZones(UserProfile.HR_ZONE_SPORT_GENERIC);
         mTimer = new Timer.Timer();
+        mDistanceHistory = new [GRADE_WINDOW_SECONDS];
+        mAltitudeHistory = new [GRADE_WINDOW_SECONDS];
 
         // Acquire GPS from launch, not just once recording starts, so the
         // status indicator has something to show and a fix is ready (or
@@ -174,6 +192,9 @@ class ActivityController {
             mSkateDistanceMeters = 0.0;
             mLapSkateDistanceMeters = 0.0;
             mPreviousDistanceMeters = 0.0;
+            mHistoryIndex = 0;
+            mHistoryCount = 0;
+            mCurrentGradePercent = 0.0;
 
             mSession = Recording.createSession({
                 :name => "Freeskate",
@@ -221,6 +242,18 @@ class ActivityController {
             mWalkSpeedField = mSession.createField(
                 "walk_speed",
                 5,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
+            );
+            mGradeField = mSession.createField(
+                "grade_percent",
+                6,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "%" }
+            );
+            mGapSpeedField = mSession.createField(
+                "grade_adjusted_speed",
+                7,
                 FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
             );
@@ -331,6 +364,7 @@ class ActivityController {
         }
 
         updateSkateClassification(info);
+        updateGradeAndGap(info);
         checkAutoLap(info);
     }
 
@@ -406,6 +440,59 @@ class ActivityController {
         }
         if (mWalkSpeedField != null) {
             mWalkSpeedField.setData(mCurrentlySkating ? 0.0 : speed);
+        }
+    }
+
+    // Smooths grade over GRADE_WINDOW_SECONDS of elapsed distance/altitude
+    // history rather than differencing consecutive ticks -- a raw per-second
+    // grade is dominated by barometer/GPS noise at typical freeskating
+    // speeds (only a couple meters of horizontal movement per tick).
+    // Grade-adjusted speed then applies Properties["gradeAdjustCoefficient"]
+    // (Settings -> "Grade Adjust Coefficient"), a rider-tunable multiplier
+    // with no fixed correct value yet -- it's meant to be dialed in against
+    // real ride data (grade/speed/HR are all recorded per-second, so
+    // post-ride analysis can fit it), not derived from wheel/truck geometry.
+    private function updateGradeAndGap(info as Activity.Info) as Void {
+        if (info.elapsedDistance == null || info.altitude == null) {
+            return;
+        }
+        var distance = info.elapsedDistance as Lang.Float;
+        var altitude = info.altitude as Lang.Float;
+        var distanceHistory = mDistanceHistory as Lang.Array<Lang.Float?>;
+        var altitudeHistory = mAltitudeHistory as Lang.Array<Lang.Float?>;
+
+        if (mHistoryCount >= GRADE_WINDOW_SECONDS) {
+            var oldestDistance = distanceHistory[mHistoryIndex] as Lang.Float;
+            var oldestAltitude = altitudeHistory[mHistoryIndex] as Lang.Float;
+            var distanceDelta = distance - oldestDistance;
+            // Require at least 1m of horizontal movement over the window --
+            // otherwise (near-stopped) the denominator is noise-dominated
+            // and would blow the grade estimate up arbitrarily. Keep the
+            // last computed value instead of resetting to 0 in that case.
+            if (distanceDelta > 1.0) {
+                mCurrentGradePercent = ((altitude - oldestAltitude) / distanceDelta) * 100.0;
+            }
+        }
+
+        distanceHistory[mHistoryIndex] = distance;
+        altitudeHistory[mHistoryIndex] = altitude;
+        mHistoryIndex = (mHistoryIndex + 1) % GRADE_WINDOW_SECONDS;
+        if (mHistoryCount < GRADE_WINDOW_SECONDS) {
+            mHistoryCount += 1;
+        }
+
+        if (mGradeField != null) {
+            mGradeField.setData(mCurrentGradePercent);
+        }
+
+        var speed = (info.currentSpeed != null) ? (info.currentSpeed as Lang.Float) : 0.0;
+        var coefficient = Properties.getValue("gradeAdjustCoefficient") as Lang.Float;
+        var factor = 1.0 + coefficient * (mCurrentGradePercent / 100.0);
+        if (factor < 0.0) {
+            factor = 0.0;
+        }
+        if (mGapSpeedField != null) {
+            mGapSpeedField.setData(speed * factor);
         }
     }
 

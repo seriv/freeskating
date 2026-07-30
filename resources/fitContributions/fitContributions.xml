@@ -29,6 +29,13 @@
     that one.
     Whether these actually render overlaid into one visual line (the
     intent) or as two stacked charts is unconfirmed until tested.
+
+    grade_percent/grade_adjusted_speed (ids 6/7) are also MESG_TYPE_RECORD,
+    for the same reason as skate_speed/walk_speed: charted per-second
+    values, not session totals. These exist to build up a dataset (grade,
+    speed, HR all recorded per-second) for tuning the gradeAdjustCoefficient
+    app setting from real rides, not because the current coefficient is
+    known to be correct.
 -->
 <resources xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
     <fitContributions>
@@ -74,5 +81,21 @@
             dataLabel="@Strings.WalkSpeedLabel"
             unitLabel="@Strings.SpeedUnit"
             fillColor="#888888" />
+        <fitField id="6"
+            displayInChart="true"
+            sortOrder="6"
+            precision="1"
+            chartTitle="@Strings.GradePercentLabel"
+            dataLabel="@Strings.GradePercentLabel"
+            unitLabel="@Strings.PercentUnit"
+            fillColor="#0088FF" />
+        <fitField id="7"
+            displayInChart="true"
+            sortOrder="7"
+            precision="1"
+            chartTitle="@Strings.GradeAdjustedSpeedLabel"
+            dataLabel="@Strings.GradeAdjustedSpeedLabel"
+            unitLabel="@Strings.SpeedUnit"
+            fillColor="#CC00CC" />
     </fitContributions>
 </resources>

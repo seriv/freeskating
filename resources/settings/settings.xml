@@ -2,4 +2,7 @@
     <setting propertyKey="@Properties.autoLapEnabled" title="@Strings.AutoLapTitle">
         <settingConfig type="boolean" />
     </setting>
+    <setting propertyKey="@Properties.gradeAdjustCoefficient" title="@Strings.GradeAdjustCoefficientTitle">
+        <settingConfig type="numeric" min="0" max="20" />
+    </setting>
 </settings>
