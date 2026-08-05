@@ -2,7 +2,7 @@
     <iq:application
         entry="FreeskateApp"
         type="watch-app"
-        id="b69523a3-f3e5-4a1d-8fb0-05a9a48c6a14"
+        id="987b3dd4-c549-4b26-8249-9dcd5b45b67d"
         name="@Strings.AppName"
         launcherIcon="@Drawables.LauncherIcon"
         minSdkVersion="5.0.1">

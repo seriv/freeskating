@@ -66,6 +66,29 @@ than on an already-running app.
    near-zero or step-derived garbage), and HR zone time looks plausible for
    the effort.
 
+## Icon attribution
+
+`resources/drawables/launcher_icon.png` and `store_cover_500x500.png` are
+generated (see `resources/drawables/source/regenerate_icons.sh`) from
+`resources/drawables/source/noun-freeskate-5427020.svg`, a Noun Project icon
+credited to Marcel. No no-attribution license was purchased for it, so any
+public listing (store description, app page, etc.) using this icon must
+carry the credit "Freeskate icon by Marcel from the Noun Project."
+
+## Publishing to the Connect IQ Store
+
+The `id` in `manifest.xml` is permanent once uploaded to Garmin's developer
+portal — Garmin's own upload confirmation says as much: an app uploaded
+under one `id` stays a private beta forever (visible only to you, under
+"Beta Apps" in the developer dashboard); making it publicly installable
+requires uploading again under a *different* `id`. There's no portal
+setting that flips a private beta to public.
+
+Practically, this means the `id` currently in `manifest.xml` is the one
+intended for public submission — if you need another private beta upload
+later (e.g. to test independently of what's live in the store), generate a
+fresh UUID for that build rather than reusing this one.
+
 ## Manifest permissions (confirmed by compiler)
 
 `Positioning`, `Fit` (gates `ActivityRecording`), `FitContributor` (gates the
