@@ -29,40 +29,9 @@ class ActivityController {
         STATE_STOPPED
     }
 
-    // GPS speed threshold distinguishing skating from everything else -- see
-    // updateSkateClassification(). Calibrated empirically from a real ride
-    // with lap markers pressed at every skate/walk transition: the 4
-    // lap-bounded skating segments averaged 2.04-3.09 m/s, the 6 walking
-    // segments averaged 0.06-1.37 m/s, a clean gap with no overlap. An
-    // ambient-step-count-based and the device's own native cadence-based
-    // heuristic were both tried first and confirmed (on two separate real
-    // rides) to NOT separate skating from walking at all -- freeskate
-    // pumping/carving motion gets picked up as step/cadence-like signal on
-    // this device, so cadence-based approaches misclassified the majority
-    // of actual skating time as "not skating."
-    //
-    // A pure per-tick threshold on this value flickers constantly during
-    // real skating, since the natural push-glide rhythm cycles speed above
-    // and below it every second or two, and it also drops out of "skating"
-    // entirely during slow, sustained uphill skating (real skating effort,
-    // just below this speed). Both are fixed by latching the classification
-    // (see mLatchedSkating/updateSkateClassification()) instead of
-    // re-deciding from raw speed alone on every tick.
-    private const SKATING_SPEED_THRESHOLD_MPS = 1.6;
-
-    // Below this, GPS speed is treated as a genuine stop (mounting/
-    // dismounting equipment, or just a pause) rather than slow movement --
-    // confirmed against real data showing full stops read as ~0 m/s, well
-    // below any real walking or skating pace.
-    private const STOPPED_SPEED_MPS = 0.2;
-
-    // How many seconds after motion resumes from a stop to watch for a
-    // push-off burst above SKATING_SPEED_THRESHOLD_MPS before settling on
-    // "not skating" -- confirmed against real data that a genuine
-    // skate-mount push-off produces a burst within 1-2 seconds of first
-    // moving, while resuming a walk does not.
-    private const BURST_CHECK_WINDOW_SECONDS = 5;
-
+    // Walk/skate classification via GPS speed threshold + latching was tried
+    // and dropped -- see project history if reintroducing this with
+    // additional sensor data (e.g. accelerometer-based cadence).
     var state as Lang.Number = STATE_READY;
 
     private var mSession as Recording.Session?;
@@ -74,33 +43,6 @@ class ActivityController {
     private var mLapCount as Lang.Number = 0;
     private var mGpsAccuracy as Lang.Number?;
     private var mLastLapDistanceMeters as Lang.Float = 0.0;
-
-    private var mSkateSeconds as Lang.Number = 0;
-    private var mOtherSeconds as Lang.Number = 0;
-    private var mSkateField as FitContributor.Field?;
-    private var mOtherField as FitContributor.Field?;
-    private var mCurrentlySkating as Lang.Boolean = false;
-    // Sticky classification -- see updateSkateClassification(). Only
-    // changes at a genuine stop-then-resume transition, not on every tick.
-    private var mLatchedSkating as Lang.Boolean = false;
-    private var mAwaitingBurstCheck as Lang.Boolean = false;
-    private var mBurstCheckTicksRemaining as Lang.Number = 0;
-
-    // Distance covered while skating -- mSkateDistanceMeters is a running
-    // session total (for the live watch display, which should keep growing
-    // over the whole ride rather than resetting); mLapSkateDistanceMeters is
-    // the same thing but reset at each lap boundary, feeding a MESG_TYPE_LAP
-    // field so Garmin Connect/MonkeyGraph can show a per-lap breakdown.
-    private var mSkateDistanceMeters as Lang.Float = 0.0;
-    private var mLapSkateDistanceMeters as Lang.Float = 0.0;
-    private var mPreviousDistanceMeters as Lang.Float = 0.0;
-    private var mLapSkateDistanceField as FitContributor.Field?;
-    // Speed split into two record-level fields (nonzero only in their own
-    // state, zero otherwise) as an approximation of a single color-coded
-    // speed graph, since Garmin Connect's built-in Speed chart has no
-    // customization hook for third-party developer fields.
-    private var mSkateSpeedField as FitContributor.Field?;
-    private var mWalkSpeedField as FitContributor.Field?;
 
     // Grade (smoothed % slope, from altitude/distance history) and a
     // rider-tunable grade-adjusted speed, recorded per second so a ride's
@@ -144,23 +86,6 @@ class ActivityController {
         return mCurrentZoneIndex;
     }
 
-    function getCurrentlySkating() as Lang.Boolean {
-        return mCurrentlySkating;
-    }
-
-    function getSkateDistanceMeters() as Lang.Float {
-        return mSkateDistanceMeters;
-    }
-
-    // Average speed while actually skating, ignoring walking/idle time --
-    // null until at least one skating second has been recorded.
-    function getAverageSkateSpeedMps() as Lang.Float? {
-        if (mSkateSeconds <= 0) {
-            return null;
-        }
-        return mSkateDistanceMeters / mSkateSeconds.toFloat();
-    }
-
     // A Position.Quality value (QUALITY_NOT_AVAILABLE..QUALITY_GOOD), or null
     // before the first fix attempt reports in.
     function getGpsAccuracy() as Lang.Number? {
@@ -183,15 +108,6 @@ class ActivityController {
             mZoneSeconds = [0, 0, 0, 0, 0];
             mCurrentZoneIndex = null;
             mLastLapDistanceMeters = 0.0;
-            mSkateSeconds = 0;
-            mOtherSeconds = 0;
-            mCurrentlySkating = false;
-            mLatchedSkating = false;
-            mAwaitingBurstCheck = false;
-            mBurstCheckTicksRemaining = 0;
-            mSkateDistanceMeters = 0.0;
-            mLapSkateDistanceMeters = 0.0;
-            mPreviousDistanceMeters = 0.0;
             mHistoryIndex = 0;
             mHistoryCount = 0;
             mCurrentGradePercent = 0.0;
@@ -215,45 +131,15 @@ class ActivityController {
                 FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s", :count => 5 }
             );
-            mSkateField = mSession.createField(
-                "skate_seconds",
-                1,
-                FitContributor.DATA_TYPE_FLOAT,
-                { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s" }
-            );
-            mOtherField = mSession.createField(
-                "other_seconds",
-                2,
-                FitContributor.DATA_TYPE_FLOAT,
-                { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s" }
-            );
-            mLapSkateDistanceField = mSession.createField(
-                "lap_skate_distance",
-                3,
-                FitContributor.DATA_TYPE_FLOAT,
-                { :mesgType => FitContributor.MESG_TYPE_LAP, :units => "m" }
-            );
-            mSkateSpeedField = mSession.createField(
-                "skate_speed",
-                4,
-                FitContributor.DATA_TYPE_FLOAT,
-                { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
-            );
-            mWalkSpeedField = mSession.createField(
-                "walk_speed",
-                5,
-                FitContributor.DATA_TYPE_FLOAT,
-                { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
-            );
             mGradeField = mSession.createField(
                 "grade_percent",
-                6,
+                1,
                 FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "%" }
             );
             mGapSpeedField = mSession.createField(
                 "grade_adjusted_speed",
-                7,
+                2,
                 FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
             );
@@ -295,10 +181,6 @@ class ActivityController {
             if (info != null && info.elapsedDistance != null) {
                 mLastLapDistanceMeters = info.elapsedDistance as Lang.Float;
             }
-            mLapSkateDistanceMeters = 0.0;
-            if (mLapSkateDistanceField != null) {
-                mLapSkateDistanceField.setData(mLapSkateDistanceMeters);
-            }
         }
     }
 
@@ -310,12 +192,6 @@ class ActivityController {
             mTimer.stop();
             if (mZoneField != null) {
                 mZoneField.setData(mZoneSeconds);
-            }
-            if (mSkateField != null) {
-                mSkateField.setData(mSkateSeconds);
-            }
-            if (mOtherField != null) {
-                mOtherField.setData(mOtherSeconds);
             }
             mSession.save();
             mSession = null;
@@ -363,84 +239,8 @@ class ActivityController {
             }
         }
 
-        updateSkateClassification(info);
         updateGradeAndGap(info);
         checkAutoLap(info);
-    }
-
-    // Distinguishes actual skating from anything else (standing, sitting,
-    // walking, running) using GPS speed alone -- see
-    // SKATING_SPEED_THRESHOLD_MPS for the calibration data behind this.
-    // Never touches lap or pause logic (see checkAutoLap()), so however
-    // noisy this classification turns out to be in practice, it cannot
-    // produce spurious laps or auto-pauses -- it only ever feeds the
-    // skate_seconds/other_seconds FIT fields and the on-screen dot. Known
-    // limitation, accepted for v1: running at a jogging pace or faster
-    // would also read as "skating" here, since speed alone can't tell
-    // gait-based movement from skating apart above that threshold.
-    //
-    // Classification is latched (mLatchedSkating), not re-decided from raw
-    // speed on every tick:
-    //  - speed >= threshold always latches skating (high-confidence signal).
-    //  - a genuine stop (speed <= STOPPED_SPEED_MPS) arms a re-evaluation:
-    //    once moving again, a push-off burst above threshold within
-    //    BURST_CHECK_WINDOW_SECONDS re-latches skating; no burst in that
-    //    window settles on not-skating instead.
-    //  - moving below threshold with no stop/re-evaluation pending keeps
-    //    whatever was last latched -- this is what lets a slow, sustained
-    //    uphill skating stretch stay classified correctly instead of
-    //    dropping out every time speed dips below the threshold.
-    private function updateSkateClassification(info as Activity.Info) as Void {
-        var speed = (info.currentSpeed != null) ? (info.currentSpeed as Lang.Float) : 0.0;
-
-        if (speed <= STOPPED_SPEED_MPS) {
-            mAwaitingBurstCheck = true;
-            mBurstCheckTicksRemaining = BURST_CHECK_WINDOW_SECONDS;
-        } else if (speed >= SKATING_SPEED_THRESHOLD_MPS) {
-            mLatchedSkating = true;
-            mAwaitingBurstCheck = false;
-        } else if (mAwaitingBurstCheck) {
-            mBurstCheckTicksRemaining -= 1;
-            if (mBurstCheckTicksRemaining <= 0) {
-                mLatchedSkating = false;
-                mAwaitingBurstCheck = false;
-            }
-        }
-        // else: moving, below threshold, not awaiting a burst check --
-        // keep the current mLatchedSkating value unchanged.
-
-        mCurrentlySkating = mLatchedSkating;
-
-        if (info.elapsedDistance != null) {
-            var currentDistance = info.elapsedDistance as Lang.Float;
-            var delta = currentDistance - mPreviousDistanceMeters;
-            if (mCurrentlySkating && delta > 0) {
-                mSkateDistanceMeters += delta;
-                mLapSkateDistanceMeters += delta;
-            }
-            mPreviousDistanceMeters = currentDistance;
-        }
-
-        if (mCurrentlySkating) {
-            mSkateSeconds += 1;
-        } else {
-            mOtherSeconds += 1;
-        }
-        if (mSkateField != null) {
-            mSkateField.setData(mSkateSeconds);
-        }
-        if (mOtherField != null) {
-            mOtherField.setData(mOtherSeconds);
-        }
-        if (mLapSkateDistanceField != null) {
-            mLapSkateDistanceField.setData(mLapSkateDistanceMeters);
-        }
-        if (mSkateSpeedField != null) {
-            mSkateSpeedField.setData(mCurrentlySkating ? speed : 0.0);
-        }
-        if (mWalkSpeedField != null) {
-            mWalkSpeedField.setData(mCurrentlySkating ? 0.0 : speed);
-        }
     }
 
     // Smooths grade over GRADE_WINDOW_SECONDS of elapsed distance/altitude

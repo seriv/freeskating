@@ -108,3 +108,11 @@ accelerometer) were discussed as possible directions but are not implemented
 — v1 is GPS distance/speed + HR zones + laps only, per the original scoping
 decision, so it can be validated on real sessions before adding motion-based
 features.
+
+A GPS-speed-threshold-based walk/skate classifier (skate_seconds/
+other_seconds FIT fields, per-second skate/walk speed split, and an
+on-screen skating-status dot) was implemented and then dropped after real
+sessions showed it wasn't reliable enough to be useful — speed alone can't
+distinguish gait-based movement from skating. May be worth reintroducing
+once additional sensor data (e.g. accelerometer) is available to classify
+on.
