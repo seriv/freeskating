@@ -16,6 +16,25 @@
     a dataset (grade, speed, HR all recorded per-second) for tuning the
     gradeAdjustCoefficient app setting from real rides, not because the
     current coefficient is known to be correct.
+
+    skate_seconds/other_seconds (ids 3/4) are each a single cumulative
+    total for the whole session, tagged manually via the Up/Down buttons
+    (see FreeskateDelegate.mc) rather than auto-detected, so
+    displayInActivitySummary (a plain summary stat) fits them better than
+    displayInChart, which implies plotting a value over time and doesn't
+    apply here since there's only one final value per session.
+
+    lap_skate_distance (id 5) is MESG_TYPE_LAP in code, reset every lap,
+    so displayInActivityLaps shows it as a per-lap breakdown rather than
+    one session total.
+
+    skate_speed/walk_speed (ids 6/7) are MESG_TYPE_RECORD (written every
+    second), each nonzero only in its own tagged state and zero otherwise.
+    Both charted, in different colors, as an approximation of a single
+    color-coded speed graph, since Garmin Connect's built-in Speed chart
+    has no customization hook for third-party developer fields, so this
+    is a separate pair of charts rather than a literal recoloring of
+    that one.
 -->
 <resources xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
     <fitContributions>
@@ -43,5 +62,39 @@
             dataLabel="@Strings.GradeAdjustedSpeedLabel"
             unitLabel="@Strings.SpeedUnit"
             fillColor="#CC00CC" />
+        <fitField id="3"
+            displayInActivitySummary="true"
+            sortOrder="3"
+            precision="0"
+            dataLabel="@Strings.SkateSecondsLabel"
+            unitLabel="@Strings.SecondsUnit" />
+        <fitField id="4"
+            displayInActivitySummary="true"
+            sortOrder="4"
+            precision="0"
+            dataLabel="@Strings.OtherSecondsLabel"
+            unitLabel="@Strings.SecondsUnit" />
+        <fitField id="5"
+            displayInActivityLaps="true"
+            sortOrder="5"
+            precision="0"
+            dataLabel="@Strings.LapSkateDistanceLabel"
+            unitLabel="@Strings.MetersUnit" />
+        <fitField id="6"
+            displayInChart="true"
+            sortOrder="6"
+            precision="1"
+            chartTitle="@Strings.SkateSpeedLabel"
+            dataLabel="@Strings.SkateSpeedLabel"
+            unitLabel="@Strings.SpeedUnit"
+            fillColor="#00CC00" />
+        <fitField id="7"
+            displayInChart="true"
+            sortOrder="7"
+            precision="1"
+            chartTitle="@Strings.WalkSpeedLabel"
+            dataLabel="@Strings.WalkSpeedLabel"
+            unitLabel="@Strings.SpeedUnit"
+            fillColor="#888888" />
     </fitContributions>
 </resources>

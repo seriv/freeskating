@@ -29,9 +29,6 @@ class ActivityController {
         STATE_STOPPED
     }
 
-    // Walk/skate classification via GPS speed threshold + latching was tried
-    // and dropped -- see project history if reintroducing this with
-    // additional sensor data (e.g. accelerometer-based cadence).
     var state as Lang.Number = STATE_READY;
 
     private var mSession as Recording.Session?;
@@ -43,6 +40,38 @@ class ActivityController {
     private var mLapCount as Lang.Number = 0;
     private var mGpsAccuracy as Lang.Number?;
     private var mLastLapDistanceMeters as Lang.Float = 0.0;
+
+    // Manual skate/walk tagging -- an automatic GPS-speed-threshold version
+    // of this was tried and dropped (speed alone can't distinguish
+    // gait-based movement from skating). Replaced with a direct manual tag
+    // instead of accelerometer-based auto-detection, since the Up/Down
+    // buttons (onPreviousPage/onNextPage) were confirmed empirically, on
+    // real Enduro 3 hardware while actively RECORDING, to be free and
+    // independent of Back/lap -- see FreeskateDelegate.mc. Being manual
+    // means no smoothing/latching is needed: the tag is exactly whatever
+    // the rider last set, so unlike the dropped classifier this can't
+    // misclassify.
+    private var mSkating as Lang.Boolean = true;
+    private var mSkateSeconds as Lang.Number = 0;
+    private var mOtherSeconds as Lang.Number = 0;
+    private var mSkateField as FitContributor.Field?;
+    private var mOtherField as FitContributor.Field?;
+    // Distance covered while tagged skating -- mSkateDistanceMeters is a
+    // running session total (for the live watch display, which should keep
+    // growing over the whole ride rather than resetting); mLapSkateDistanceMeters
+    // is the same thing but reset at each lap boundary, feeding a
+    // MESG_TYPE_LAP field so Garmin Connect/MonkeyGraph can show a per-lap
+    // breakdown.
+    private var mSkateDistanceMeters as Lang.Float = 0.0;
+    private var mLapSkateDistanceMeters as Lang.Float = 0.0;
+    private var mPreviousDistanceMeters as Lang.Float = 0.0;
+    private var mLapSkateDistanceField as FitContributor.Field?;
+    // Speed split into two record-level fields (nonzero only in their own
+    // tag, zero otherwise) as an approximation of a single color-coded
+    // speed graph, since Garmin Connect's built-in Speed chart has no
+    // customization hook for third-party developer fields.
+    private var mSkateSpeedField as FitContributor.Field?;
+    private var mWalkSpeedField as FitContributor.Field?;
 
     // Grade (smoothed % slope, from altitude/distance history) and a
     // rider-tunable grade-adjusted speed, recorded per second so a ride's
@@ -86,6 +115,30 @@ class ActivityController {
         return mCurrentZoneIndex;
     }
 
+    // Set directly by the Up/Down buttons (FreeskateDelegate), not a
+    // toggle -- each button means "I am doing this now," so a repeated or
+    // out-of-sync press is harmless.
+    function setSkating(skating as Lang.Boolean) as Void {
+        mSkating = skating;
+    }
+
+    function getCurrentlySkating() as Lang.Boolean {
+        return mSkating;
+    }
+
+    function getSkateDistanceMeters() as Lang.Float {
+        return mSkateDistanceMeters;
+    }
+
+    // Average speed while tagged skating, ignoring walking/idle time --
+    // null until at least one skating second has been recorded.
+    function getAverageSkateSpeedMps() as Lang.Float? {
+        if (mSkateSeconds <= 0) {
+            return null;
+        }
+        return mSkateDistanceMeters / mSkateSeconds.toFloat();
+    }
+
     // A Position.Quality value (QUALITY_NOT_AVAILABLE..QUALITY_GOOD), or null
     // before the first fix attempt reports in.
     function getGpsAccuracy() as Lang.Number? {
@@ -111,6 +164,12 @@ class ActivityController {
             mHistoryIndex = 0;
             mHistoryCount = 0;
             mCurrentGradePercent = 0.0;
+            mSkating = true;
+            mSkateSeconds = 0;
+            mOtherSeconds = 0;
+            mSkateDistanceMeters = 0.0;
+            mLapSkateDistanceMeters = 0.0;
+            mPreviousDistanceMeters = 0.0;
 
             mSession = Recording.createSession({
                 :name => "Freeskate",
@@ -140,6 +199,36 @@ class ActivityController {
             mGapSpeedField = mSession.createField(
                 "grade_adjusted_speed",
                 2,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
+            );
+            mSkateField = mSession.createField(
+                "skate_seconds",
+                3,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s" }
+            );
+            mOtherField = mSession.createField(
+                "other_seconds",
+                4,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s" }
+            );
+            mLapSkateDistanceField = mSession.createField(
+                "lap_skate_distance",
+                5,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_LAP, :units => "m" }
+            );
+            mSkateSpeedField = mSession.createField(
+                "skate_speed",
+                6,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
+            );
+            mWalkSpeedField = mSession.createField(
+                "walk_speed",
+                7,
                 FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
             );
@@ -181,6 +270,10 @@ class ActivityController {
             if (info != null && info.elapsedDistance != null) {
                 mLastLapDistanceMeters = info.elapsedDistance as Lang.Float;
             }
+            mLapSkateDistanceMeters = 0.0;
+            if (mLapSkateDistanceField != null) {
+                mLapSkateDistanceField.setData(mLapSkateDistanceMeters);
+            }
         }
     }
 
@@ -192,6 +285,12 @@ class ActivityController {
             mTimer.stop();
             if (mZoneField != null) {
                 mZoneField.setData(mZoneSeconds);
+            }
+            if (mSkateField != null) {
+                mSkateField.setData(mSkateSeconds);
+            }
+            if (mOtherField != null) {
+                mOtherField.setData(mOtherSeconds);
             }
             mSession.save();
             mSession = null;
@@ -239,8 +338,47 @@ class ActivityController {
             }
         }
 
+        updateSkateBookkeeping(info);
         updateGradeAndGap(info);
         checkAutoLap(info);
+    }
+
+    // Accumulates skate/other seconds and skate distance according to the
+    // manually-set mSkating tag (see setSkating()) -- purely bookkeeping,
+    // no classification logic here since the tag is already known.
+    private function updateSkateBookkeeping(info as Activity.Info) as Void {
+        var speed = (info.currentSpeed != null) ? (info.currentSpeed as Lang.Float) : 0.0;
+
+        if (info.elapsedDistance != null) {
+            var currentDistance = info.elapsedDistance as Lang.Float;
+            var delta = currentDistance - mPreviousDistanceMeters;
+            if (mSkating && delta > 0) {
+                mSkateDistanceMeters += delta;
+                mLapSkateDistanceMeters += delta;
+            }
+            mPreviousDistanceMeters = currentDistance;
+        }
+
+        if (mSkating) {
+            mSkateSeconds += 1;
+        } else {
+            mOtherSeconds += 1;
+        }
+        if (mSkateField != null) {
+            mSkateField.setData(mSkateSeconds);
+        }
+        if (mOtherField != null) {
+            mOtherField.setData(mOtherSeconds);
+        }
+        if (mLapSkateDistanceField != null) {
+            mLapSkateDistanceField.setData(mLapSkateDistanceMeters);
+        }
+        if (mSkateSpeedField != null) {
+            mSkateSpeedField.setData(mSkating ? speed : 0.0);
+        }
+        if (mWalkSpeedField != null) {
+            mWalkSpeedField.setData(mSkating ? 0.0 : speed);
+        }
     }
 
     // Smooths grade over GRADE_WINDOW_SECONDS of elapsed distance/altitude

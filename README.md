@@ -77,6 +77,21 @@ carry the credit "Freeskate icon by Marcel from the Noun Project."
 
 ## Publishing to the Connect IQ Store
 
+The portal upload is a separate build artifact from the sideload
+`.prg` -- `bin/Freeskate.prg` (built with `-d enduro3`, see above) only
+targets one device and isn't what the portal accepts. Build the
+submission package with:
+
+```
+"$SDK_BIN/monkeyc" -e -o bin/Freeskate.iq -f monkey.jungle \
+    -y developer_key.der -r
+```
+
+(`-e`/`--package-app` produces the `.iq` package; `-r` strips debug info,
+appropriate for a submission build.) Re-run this after every change meant
+for the store, the same way `bin/Freeskate.prg` needs re-running after
+every change meant for sideload -- neither regenerates the other.
+
 The `id` in `manifest.xml` is permanent once uploaded to Garmin's developer
 portal — Garmin's own upload confirmation says as much: an app uploaded
 under one `id` stays a private beta forever (visible only to you, under
@@ -88,6 +103,17 @@ Practically, this means the `id` currently in `manifest.xml` is the one
 intended for public submission — if you need another private beta upload
 later (e.g. to test independently of what's live in the store), generate a
 fresh UUID for that build rather than reusing this one.
+
+**Deleting an app from the dashboard does not free its `id` for reuse.**
+Confirmed by hitting "The manifest app ID is already in use by another
+app" on a fresh submission after deleting the prior beta upload that had
+used that `id` -- the block persisted regardless. Treat every `id` as
+burned the moment it's ever uploaded, beta or not, deleted or not: don't
+test-upload a build as a beta under the `id` you intend to eventually
+submit for public review. If you want to sanity-check that a build
+installs before committing to the real public submission, generate a
+disposable UUID for that test and a separate fresh one for the actual
+submission.
 
 ## Manifest permissions (confirmed by compiler)
 

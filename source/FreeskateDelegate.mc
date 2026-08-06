@@ -9,18 +9,29 @@ using Toybox.Timer;
 //                     input -- see startPauseMenuCountdown()); exits the app
 //                     (default platform behavior) when ready/stopped, since
 //                     there's no unsaved recording to protect at that point
-//   Next/Prev page -> reserved for screen scrolling; deliberately a no-op here
-//                     (this app has only one screen, and these must NOT also
-//                     trigger lap/stop -- confirmed on real hardware that they
-//                     otherwise read as a confusing duplicate of the lap button)
+//   Next/Prev page -> physically the Up/Down buttons on the Enduro 3
+//                     (Down -> onNextPage, Up -> onPreviousPage, confirmed
+//                     empirically). Used here to manually tag skate/walk:
+//                     Down = skating, Up = walking (see
+//                     ActivityController.setSkating()). Confirmed on real
+//                     hardware, while actively RECORDING (lap is only
+//                     reachable from that state), to fire independently of
+//                     Back: the lap count never moved while pressing
+//                     either. An earlier version of this comment claimed
+//                     they duplicated the lap button; that was most likely
+//                     observed in the desktop simulator, not on real
+//                     hardware, and doesn't hold up under this retest.
 //
 // Mirrors native Garmin activity apps: Select toggles recording/paused, and
 // stopping goes through a pause menu (Resume/Save/Discard) -- like native
 // apps, this is a two-step gate against ending a recording with one
-// accidental press. FreeskateView shows on-screen hints for which button
-// does what in each state so this isn't something the user has to remember.
-// (A fourth "Resume Later" option was tried and removed -- see the comment
-// on ActivityController for why it can't work on real hardware.)
+// accidental press. No on-screen Select/Back button hints -- deliberately
+// omitted (an earlier version had them) since anyone who's used a standard
+// Garmin activity app already knows this convention, and the round
+// enduro3 screen has no comfortable room to spare for them (see
+// FreeskateView.onUpdate()). (A fourth "Resume Later" option was tried and
+// removed -- see the comment on ActivityController for why it can't work
+// on real hardware.)
 //
 // A previous version of this file made onBack() always return true (never
 // falling through to the platform's default "exit app" handling), because
@@ -108,10 +119,14 @@ class FreeskateDelegate extends WatchUi.BehaviorDelegate {
     }
 
     function onNextPage() as Lang.Boolean {
+        mController.setSkating(true);
+        WatchUi.requestUpdate();
         return true;
     }
 
     function onPreviousPage() as Lang.Boolean {
+        mController.setSkating(false);
+        WatchUi.requestUpdate();
         return true;
     }
 

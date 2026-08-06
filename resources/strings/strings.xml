@@ -8,4 +8,10 @@
     <string id="GradePercentLabel">Grade</string>
     <string id="GradeAdjustedSpeedLabel">Grade-Adjusted Speed</string>
     <string id="PercentUnit">%</string>
+    <string id="SkateSecondsLabel">Skate Seconds</string>
+    <string id="OtherSecondsLabel">Other Seconds</string>
+    <string id="LapSkateDistanceLabel">Lap Skate Distance</string>
+    <string id="SkateSpeedLabel">Skate Speed</string>
+    <string id="WalkSpeedLabel">Walk Speed</string>
+    <string id="MetersUnit">m</string>
 </strings>
