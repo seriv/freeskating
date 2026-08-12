@@ -118,8 +118,10 @@ submission.
 ## Manifest permissions (confirmed by compiler)
 
 `Positioning`, `Fit` (gates `ActivityRecording`), `FitContributor` (gates the
-custom HR-zone-time field), and `UserProfile` (gates `getHeartRateZones`) are
-all required — the compiler errors precisely by symbol if any is missing.
+custom HR-zone-time field), `UserProfile` (gates `getHeartRateZones`), and
+`Sensor` (gates `registerSensorDataListener`, used by `PumpCadenceDetector`
+for the wrist accelerometer) are all required — the compiler errors
+precisely by symbol if any is missing.
 
 ## Button mapping (source/FreeskateDelegate.mc)
 

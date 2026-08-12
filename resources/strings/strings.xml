@@ -14,4 +14,10 @@
     <string id="SkateSpeedLabel">Skate Speed</string>
     <string id="WalkSpeedLabel">Walk Speed</string>
     <string id="MetersUnit">m</string>
+    <string id="RegularSecondsLabel">Regular Seconds</string>
+    <string id="GoofySecondsLabel">Goofy Seconds</string>
+    <string id="RegularSpeedLabel">Regular Speed</string>
+    <string id="GoofySpeedLabel">Goofy Speed</string>
+    <string id="PumpCadenceLabel">Pump Cadence</string>
+    <string id="CadenceUnit">cpm</string>
 </strings>

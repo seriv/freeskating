@@ -25,6 +25,12 @@ class PauseMenuDelegate extends WatchUi.Menu2InputDelegate {
             mController.resume();
             WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
             WatchUi.requestUpdate();
+        } else if (id == :stance) {
+            // ToggleMenuItem has already flipped its own isEnabled() to the
+            // new state by the time onSelect() fires -- read it rather than
+            // inverting the old value ourselves.
+            var toggle = item as WatchUi.ToggleMenuItem;
+            mController.setStance(toggle.isEnabled());
         } else if (id == :save) {
             mController.stopAndSave();
             System.exit();

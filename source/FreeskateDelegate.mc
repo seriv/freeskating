@@ -110,9 +110,22 @@ class FreeskateDelegate extends WatchUi.BehaviorDelegate {
     // Once pushed, the Menu2/PauseMenuDelegate owns all button input until
     // popped -- there's no path for this delegate's onSelect()/onBack() to
     // also fire on a press meant for the menu.
+    // Stance (regular/goofy) has no free physical button left to live-toggle
+    // while RECORDING -- Select/Back/Up/Down are all already committed (see
+    // button mapping comment above), and onMenu() turned out to be a
+    // long-hold of the same Up button already used for the skate/walk tag,
+    // not an independent one. So this is set here instead, via a
+    // ToggleMenuItem: its checkbox already shows the current stance when the
+    // menu opens, and selecting it flips ActivityController's tag without
+    // closing the menu, so the rider still has to pick "Resume" afterward --
+    // an acceptable cost since stance is switched roughly every half-mile to
+    // a mile, not continuously like skate/walk.
     private function showPauseMenu() as Void {
         var menu = new WatchUi.Menu2({ :title => "Paused" });
         menu.addItem(new WatchUi.MenuItem("Resume", null, :resume, {}));
+        menu.addItem(new WatchUi.ToggleMenuItem(
+            "Regular Stance", null, :stance, mController.getRegularStance(), {}
+        ));
         menu.addItem(new WatchUi.MenuItem("Save", null, :save, {}));
         menu.addItem(new WatchUi.MenuItem("Discard", null, :discard, {}));
         WatchUi.pushView(menu, new PauseMenuDelegate(mController), WatchUi.SLIDE_IMMEDIATE);

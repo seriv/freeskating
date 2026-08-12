@@ -35,6 +35,25 @@
     has no customization hook for third-party developer fields, so this
     is a separate pair of charts rather than a literal recoloring of
     that one.
+
+    regular_seconds/goofy_seconds (ids 8/9) mirror skate_seconds/
+    other_seconds (id 3/4): a single cumulative total for the whole
+    session, tagged manually via the pause-menu ToggleMenuItem (see
+    PauseMenuDelegate.mc) rather than auto-detected, so
+    displayInActivitySummary fits them the same way. Only accumulate while
+    also tagged skating; stance doesn't apply to the walking tag.
+
+    regular_speed/goofy_speed (ids 10/11) mirror skate_speed/walk_speed
+    (id 6/7): MESG_TYPE_RECORD, each nonzero only while tagged skating AND
+    that stance, zero otherwise, charted as the same kind of color-coded
+    speed-graph approximation.
+
+    pump_cadence (id 12) is MESG_TYPE_RECORD, written every second by
+    PumpCadenceDetector via ActivityController: a wrist-accelerometer-
+    derived estimate of pumping cycles per minute, zero while tagged
+    walking. Charted like grade_percent/grade_adjusted_speed: the point
+    right now is building up a dataset to look at from real rides, since
+    the detector's peak threshold is an unvalidated starting guess.
 -->
 <resources xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
     <fitContributions>
@@ -96,5 +115,41 @@
             dataLabel="@Strings.WalkSpeedLabel"
             unitLabel="@Strings.SpeedUnit"
             fillColor="#888888" />
+        <fitField id="8"
+            displayInActivitySummary="true"
+            sortOrder="8"
+            precision="0"
+            dataLabel="@Strings.RegularSecondsLabel"
+            unitLabel="@Strings.SecondsUnit" />
+        <fitField id="9"
+            displayInActivitySummary="true"
+            sortOrder="9"
+            precision="0"
+            dataLabel="@Strings.GoofySecondsLabel"
+            unitLabel="@Strings.SecondsUnit" />
+        <fitField id="10"
+            displayInChart="true"
+            sortOrder="10"
+            precision="1"
+            chartTitle="@Strings.RegularSpeedLabel"
+            dataLabel="@Strings.RegularSpeedLabel"
+            unitLabel="@Strings.SpeedUnit"
+            fillColor="#0044CC" />
+        <fitField id="11"
+            displayInChart="true"
+            sortOrder="11"
+            precision="1"
+            chartTitle="@Strings.GoofySpeedLabel"
+            dataLabel="@Strings.GoofySpeedLabel"
+            unitLabel="@Strings.SpeedUnit"
+            fillColor="#CC8800" />
+        <fitField id="12"
+            displayInChart="true"
+            sortOrder="12"
+            precision="0"
+            chartTitle="@Strings.PumpCadenceLabel"
+            dataLabel="@Strings.PumpCadenceLabel"
+            unitLabel="@Strings.CadenceUnit"
+            fillColor="#00CCCC" />
     </fitContributions>
 </resources>

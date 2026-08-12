@@ -93,9 +93,11 @@ class FreeskateView extends WatchUi.View {
         var state = mController.getState();
 
         dc.setColor(gpsColor(mController.getGpsAccuracy()), Graphics.COLOR_TRANSPARENT);
-        dc.fillCircle(centerX - width * 0.08, height * 0.06, height * 0.02);
+        dc.fillCircle(centerX - width * 0.12, height * 0.06, height * 0.02);
+        dc.setColor(stanceColor(mController.getRegularStance()), Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle(centerX, height * 0.06, height * 0.02);
         dc.setColor(skateColor(mController.getCurrentlySkating()), Graphics.COLOR_TRANSPARENT);
-        dc.fillCircle(centerX + width * 0.08, height * 0.06, height * 0.02);
+        dc.fillCircle(centerX + width * 0.12, height * 0.06, height * 0.02);
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
 
         // Stacked from a running cursor based on each font's actual
@@ -145,6 +147,15 @@ class FreeskateView extends WatchUi.View {
     // error condition.
     private function skateColor(skating as Lang.Boolean) as Graphics.ColorType {
         return skating ? Graphics.COLOR_GREEN : Graphics.COLOR_DK_GRAY;
+    }
+
+    // Blue for regular, orange for goofy -- matches the regular_speed/
+    // goofy_speed chart colors in fitContributions.xml, and stays clear of
+    // red/yellow/green already used by the GPS dot. Only set via the
+    // pause-menu ToggleMenuItem (see PauseMenuDelegate), so this is the only
+    // on-screen feedback for which stance is currently tagged.
+    private function stanceColor(regular as Lang.Boolean) as Graphics.ColorType {
+        return regular ? Graphics.COLOR_BLUE : Graphics.COLOR_ORANGE;
     }
 
     private function stateLabel(state as Lang.Number) as Lang.String {

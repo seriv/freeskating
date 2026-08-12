@@ -73,6 +73,25 @@ class ActivityController {
     private var mSkateSpeedField as FitContributor.Field?;
     private var mWalkSpeedField as FitContributor.Field?;
 
+    // Manual regular/goofy stance tagging -- same rationale as mSkating:
+    // GPS speed/position can't tell stance apart, so this is a direct
+    // manual tag, set via a ToggleMenuItem in the pause menu (see
+    // PauseMenuDelegate) rather than a live button, since every physical
+    // button during RECORDING is already committed (see FreeskateDelegate).
+    // Only meaningful while mSkating is true -- stance doesn't apply to the
+    // walking tag, so goofy/regular bookkeeping is gated on mSkating below.
+    // Defaults to goofy (false): that's the stance ridden the large
+    // majority of the time, so it's the safer assumption if a ride starts
+    // before the rider remembers to check/flip it.
+    private var mRegular as Lang.Boolean = false;
+    private var mRegularSeconds as Lang.Number = 0;
+    private var mGoofySeconds as Lang.Number = 0;
+    private var mRegularField as FitContributor.Field?;
+    private var mGoofyField as FitContributor.Field?;
+    private var mRegularDistanceMeters as Lang.Float = 0.0;
+    private var mRegularSpeedField as FitContributor.Field?;
+    private var mGoofySpeedField as FitContributor.Field?;
+
     // Grade (smoothed % slope, from altitude/distance history) and a
     // rider-tunable grade-adjusted speed, recorded per second so a ride's
     // grade/speed/HR can be correlated afterwards to calibrate the
@@ -89,6 +108,13 @@ class ActivityController {
     private var mGradeField as FitContributor.Field?;
     private var mGapSpeedField as FitContributor.Field?;
 
+    // See PumpCadenceDetector for the accelerometer signal processing --
+    // this class only owns its lifecycle (RECORDING-only, same as mTimer)
+    // and the FIT field. Only meaningful while tagged skating, so the
+    // written value is gated on mSkating the same way skate_speed is.
+    private var mPumpCadenceDetector as PumpCadenceDetector;
+    private var mPumpCadenceField as FitContributor.Field?;
+
     function initialize() {
         // Garmin-configured zones, not hardcoded thresholds -- boundaries are
         // [min1, max1, max2, max3, max4, max5] in bpm.
@@ -96,6 +122,7 @@ class ActivityController {
         mTimer = new Timer.Timer();
         mDistanceHistory = new [GRADE_WINDOW_SECONDS];
         mAltitudeHistory = new [GRADE_WINDOW_SECONDS];
+        mPumpCadenceDetector = new PumpCadenceDetector();
 
         // Acquire GPS from launch, not just once recording starts, so the
         // status indicator has something to show and a fix is ready (or
@@ -128,6 +155,27 @@ class ActivityController {
 
     function getSkateDistanceMeters() as Lang.Float {
         return mSkateDistanceMeters;
+    }
+
+    // Set directly by the pause-menu ToggleMenuItem (PauseMenuDelegate), not
+    // a toggle method here -- same "last value wins" rationale as
+    // setSkating().
+    function setStance(regular as Lang.Boolean) as Void {
+        mRegular = regular;
+    }
+
+    function getRegularStance() as Lang.Boolean {
+        return mRegular;
+    }
+
+    // Average speed while tagged skating AND regular, ignoring goofy/
+    // walking time -- null until at least one regular-skating second has
+    // been recorded.
+    function getAverageRegularSpeedMps() as Lang.Float? {
+        if (mRegularSeconds <= 0) {
+            return null;
+        }
+        return mRegularDistanceMeters / mRegularSeconds.toFloat();
     }
 
     // Average speed while tagged skating, ignoring walking/idle time --
@@ -170,6 +218,11 @@ class ActivityController {
             mSkateDistanceMeters = 0.0;
             mLapSkateDistanceMeters = 0.0;
             mPreviousDistanceMeters = 0.0;
+            mRegular = false;
+            mRegularSeconds = 0;
+            mGoofySeconds = 0;
+            mRegularDistanceMeters = 0.0;
+            mPumpCadenceDetector.reset();
 
             mSession = Recording.createSession({
                 :name => "Freeskate",
@@ -232,11 +285,42 @@ class ActivityController {
                 FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
             );
+            mRegularField = mSession.createField(
+                "regular_seconds",
+                8,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s" }
+            );
+            mGoofyField = mSession.createField(
+                "goofy_seconds",
+                9,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s" }
+            );
+            mRegularSpeedField = mSession.createField(
+                "regular_speed",
+                10,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
+            );
+            mGoofySpeedField = mSession.createField(
+                "goofy_speed",
+                11,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
+            );
+            mPumpCadenceField = mSession.createField(
+                "pump_cadence",
+                12,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "cpm" }
+            );
         }
 
         if (mSession != null) {
             mSession.start();
             mTimer.start(method(:onTimerTick), 1000, true);
+            mPumpCadenceDetector.start();
             state = STATE_RECORDING;
         }
     }
@@ -245,6 +329,7 @@ class ActivityController {
         if (state == STATE_RECORDING && mSession != null) {
             mSession.stop();
             mTimer.stop();
+            mPumpCadenceDetector.stop();
             state = STATE_PAUSED;
         }
     }
@@ -253,6 +338,7 @@ class ActivityController {
         if (state == STATE_PAUSED && mSession != null) {
             mSession.start();
             mTimer.start(method(:onTimerTick), 1000, true);
+            mPumpCadenceDetector.start();
             state = STATE_RECORDING;
         }
     }
@@ -283,6 +369,7 @@ class ActivityController {
                 mSession.stop();
             }
             mTimer.stop();
+            mPumpCadenceDetector.stop();
             if (mZoneField != null) {
                 mZoneField.setData(mZoneSeconds);
             }
@@ -291,6 +378,12 @@ class ActivityController {
             }
             if (mOtherField != null) {
                 mOtherField.setData(mOtherSeconds);
+            }
+            if (mRegularField != null) {
+                mRegularField.setData(mRegularSeconds);
+            }
+            if (mGoofyField != null) {
+                mGoofyField.setData(mGoofySeconds);
             }
             mSession.save();
             mSession = null;
@@ -304,6 +397,7 @@ class ActivityController {
                 mSession.stop();
             }
             mTimer.stop();
+            mPumpCadenceDetector.stop();
             mSession.discard();
             mSession = null;
         }
@@ -355,12 +449,20 @@ class ActivityController {
             if (mSkating && delta > 0) {
                 mSkateDistanceMeters += delta;
                 mLapSkateDistanceMeters += delta;
+                if (mRegular) {
+                    mRegularDistanceMeters += delta;
+                }
             }
             mPreviousDistanceMeters = currentDistance;
         }
 
         if (mSkating) {
             mSkateSeconds += 1;
+            if (mRegular) {
+                mRegularSeconds += 1;
+            } else {
+                mGoofySeconds += 1;
+            }
         } else {
             mOtherSeconds += 1;
         }
@@ -378,6 +480,22 @@ class ActivityController {
         }
         if (mWalkSpeedField != null) {
             mWalkSpeedField.setData(mSkating ? 0.0 : speed);
+        }
+        if (mRegularField != null) {
+            mRegularField.setData(mRegularSeconds);
+        }
+        if (mGoofyField != null) {
+            mGoofyField.setData(mGoofySeconds);
+        }
+        if (mRegularSpeedField != null) {
+            mRegularSpeedField.setData((mSkating && mRegular) ? speed : 0.0);
+        }
+        if (mGoofySpeedField != null) {
+            mGoofySpeedField.setData((mSkating && !mRegular) ? speed : 0.0);
+        }
+        if (mPumpCadenceField != null) {
+            var cadence = mSkating ? mPumpCadenceDetector.getCadence().toFloat() : 0.0;
+            mPumpCadenceField.setData(cadence);
         }
     }
 
