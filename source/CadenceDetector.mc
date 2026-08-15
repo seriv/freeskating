@@ -2,24 +2,37 @@ using Toybox.Sensor;
 using Toybox.Math;
 using Toybox.Lang;
 
-// Estimates pump cadence (side-to-side pumping cycles per minute) from the
-// wrist accelerometer. Deliberately magnitude-based (sqrt(x^2+y^2+z^2))
-// rather than picking a single axis: the watch's rotational orientation on
-// the wrist isn't fixed or known, so a single-axis signal would depend on
-// how the rider happens to be wearing it, while magnitude is orientation-
+// Estimates cadence (rhythmic wrist-motion cycles per minute) from the
+// accelerometer. Deliberately magnitude-based (sqrt(x^2+y^2+z^2)) rather
+// than picking a single axis: the watch's rotational orientation on the
+// wrist isn't fixed or known, so a single-axis signal would depend on how
+// the rider happens to be wearing it, while magnitude is orientation-
 // independent -- the same reason step counters use it instead of a
 // specific axis.
+//
+// Originally scoped as "pump cadence" (skating only), but the same wrist
+// motion detector picks up walking arm-swing just as well, and running it
+// continuously -- not just while tagged skating -- turns it into a
+// labeled dataset for free: ActivityController already records ground-
+// truth walk/skate and regular/goofy tags every second, so recording this
+// signal in every state (rather than zeroing it out while walking) is what
+// makes it possible to later ask whether accelerometer data alone can
+// distinguish walk vs. goofy vs. regular skating, instead of relying on
+// the manual button/menu tags. Not implemented yet -- this class only
+// produces the raw cadence number; the classification is future work.
 //
 // A wrist accelerometer is a poor proxy for the actual board/footplate
 // mechanics (it measures arm swing, not edge angle or pivot), but pumping
 // does drive a rhythmic arm swing, similar to how running dynamics infers
 // cadence from a wrist swing rather than a foot-mounted sensor.
 //
-// PEAK_THRESHOLD_MILLIG below is a rough starting guess, not yet calibrated
-// against real ride data -- same caveat as ActivityController's
-// gradeAdjustCoefficient. Expect to retune it once real accelerometer data
-// from a ride is available to look at.
-class PumpCadenceDetector {
+// PEAK_THRESHOLD_MILLIG below is a rough starting guess, not yet
+// calibrated against real data -- same caveat as ActivityController's
+// gradeAdjustCoefficient. The first real ride recorded under this name
+// (skate-only, gated) showed close to zero correlation between cadence and
+// skate speed, so treat this as a first pass pending retuning, not a
+// validated metric.
+class CadenceDetector {
 
     private const SAMPLE_RATE_HZ = 25;
     private const SENSOR_PERIOD_SECONDS = 1;
@@ -30,11 +43,11 @@ class PumpCadenceDetector {
     private const PEAK_THRESHOLD_MILLIG = 150.0;
     // Minimum samples between counted peaks (~0.25s at SAMPLE_RATE_HZ),
     // caps detected cadence at 240/min so sensor noise can't be counted as
-    // multiple pumps within one real pumping cycle.
+    // multiple cycles within one real motion cycle.
     private const REFRACTORY_SAMPLES = 6;
     // Cadence is reported as a trailing rolling average over this many
     // one-second buckets, rather than the instantaneous last-second count,
-    // so it doesn't jump around between individual pump strides.
+    // so it doesn't jump around between individual strides/pumps.
     private const CADENCE_WINDOW_SECONDS = 4;
 
     private var mBaseline as Lang.Float = 1000.0;
@@ -64,9 +77,12 @@ class PumpCadenceDetector {
 
     // Tied to the same RECORDING-only lifecycle as ActivityController's
     // mTimer (start()/resume() enable, pause()/stopAndSave()/discard()
-    // disable) -- continuous accelerometer sampling has a real battery
-    // cost, so it should only run while actually recording, not just while
-    // the app is open.
+    // disable), NOT to the walk/skate tag -- runs the whole time you're
+    // recording, regardless of activity, which is what makes the walk-vs-
+    // skate dataset possible. Enduro 3's battery budget makes continuous
+    // accelerometer sampling during a single activity a non-issue relative
+    // to its multi-day GPS endurance, so there's no need to gate this any
+    // tighter than "is a session actually running."
     function start() as Void {
         if (mEnabled) {
             return;
@@ -122,7 +138,9 @@ class PumpCadenceDetector {
         mCurrentSecondPeaks = 0;
     }
 
-    // Pumps per minute, averaged over the trailing CADENCE_WINDOW_SECONDS.
+    // Wrist-motion cycles per minute, averaged over the trailing
+    // CADENCE_WINDOW_SECONDS. Meaningful in any activity state (walking,
+    // skating) -- it's the caller's job to label it, not this class's.
     function getCadence() as Lang.Number {
         var total = 0;
         for (var i = 0; i < CADENCE_WINDOW_SECONDS; i += 1) {

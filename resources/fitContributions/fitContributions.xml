@@ -48,12 +48,17 @@
     that stance, zero otherwise, charted as the same kind of color-coded
     speed-graph approximation.
 
-    pump_cadence (id 12) is MESG_TYPE_RECORD, written every second by
-    PumpCadenceDetector via ActivityController: a wrist-accelerometer-
-    derived estimate of pumping cycles per minute, zero while tagged
-    walking. Charted like grade_percent/grade_adjusted_speed: the point
-    right now is building up a dataset to look at from real rides, since
-    the detector's peak threshold is an unvalidated starting guess.
+    accel_cadence (id 12) is MESG_TYPE_RECORD, written every second by
+    CadenceDetector via ActivityController: a wrist-accelerometer-derived
+    estimate of rhythmic wrist-motion cycles per minute. Unlike the other
+    per-second fields here, deliberately NOT gated on mSkating: recorded
+    in every activity state (walking included) so it can be compared
+    against the walk/skate and regular/goofy tags after the fact, as a
+    first step toward auto-classifying stance from accelerometer data
+    alone instead of the manual tags. Charted like grade_percent/
+    grade_adjusted_speed for the same reason: building up a dataset to
+    look at from real rides, since the detector's peak threshold is an
+    unvalidated starting guess.
 -->
 <resources xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
     <fitContributions>
@@ -147,8 +152,8 @@
             displayInChart="true"
             sortOrder="12"
             precision="0"
-            chartTitle="@Strings.PumpCadenceLabel"
-            dataLabel="@Strings.PumpCadenceLabel"
+            chartTitle="@Strings.AccelCadenceLabel"
+            dataLabel="@Strings.AccelCadenceLabel"
             unitLabel="@Strings.CadenceUnit"
             fillColor="#00CCCC" />
     </fitContributions>

@@ -108,12 +108,14 @@ class ActivityController {
     private var mGradeField as FitContributor.Field?;
     private var mGapSpeedField as FitContributor.Field?;
 
-    // See PumpCadenceDetector for the accelerometer signal processing --
-    // this class only owns its lifecycle (RECORDING-only, same as mTimer)
-    // and the FIT field. Only meaningful while tagged skating, so the
-    // written value is gated on mSkating the same way skate_speed is.
-    private var mPumpCadenceDetector as PumpCadenceDetector;
-    private var mPumpCadenceField as FitContributor.Field?;
+    // See CadenceDetector for the accelerometer signal processing -- this
+    // class only owns its lifecycle (RECORDING-only, same as mTimer) and
+    // the FIT field. Recorded in every activity state (not gated on
+    // mSkating) -- see CadenceDetector's comment for why: it's meant to
+    // become a labeled walk-vs-skate-vs-stance dataset, which requires
+    // data from all of them, not just skating.
+    private var mCadenceDetector as CadenceDetector;
+    private var mCadenceField as FitContributor.Field?;
 
     function initialize() {
         // Garmin-configured zones, not hardcoded thresholds -- boundaries are
@@ -122,7 +124,7 @@ class ActivityController {
         mTimer = new Timer.Timer();
         mDistanceHistory = new [GRADE_WINDOW_SECONDS];
         mAltitudeHistory = new [GRADE_WINDOW_SECONDS];
-        mPumpCadenceDetector = new PumpCadenceDetector();
+        mCadenceDetector = new CadenceDetector();
 
         // Acquire GPS from launch, not just once recording starts, so the
         // status indicator has something to show and a fix is ready (or
@@ -222,7 +224,7 @@ class ActivityController {
             mRegularSeconds = 0;
             mGoofySeconds = 0;
             mRegularDistanceMeters = 0.0;
-            mPumpCadenceDetector.reset();
+            mCadenceDetector.reset();
 
             mSession = Recording.createSession({
                 :name => "Freeskate",
@@ -309,8 +311,8 @@ class ActivityController {
                 FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "m/s" }
             );
-            mPumpCadenceField = mSession.createField(
-                "pump_cadence",
+            mCadenceField = mSession.createField(
+                "accel_cadence",
                 12,
                 FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "cpm" }
@@ -320,7 +322,7 @@ class ActivityController {
         if (mSession != null) {
             mSession.start();
             mTimer.start(method(:onTimerTick), 1000, true);
-            mPumpCadenceDetector.start();
+            mCadenceDetector.start();
             state = STATE_RECORDING;
         }
     }
@@ -329,7 +331,7 @@ class ActivityController {
         if (state == STATE_RECORDING && mSession != null) {
             mSession.stop();
             mTimer.stop();
-            mPumpCadenceDetector.stop();
+            mCadenceDetector.stop();
             state = STATE_PAUSED;
         }
     }
@@ -338,7 +340,7 @@ class ActivityController {
         if (state == STATE_PAUSED && mSession != null) {
             mSession.start();
             mTimer.start(method(:onTimerTick), 1000, true);
-            mPumpCadenceDetector.start();
+            mCadenceDetector.start();
             state = STATE_RECORDING;
         }
     }
@@ -369,7 +371,7 @@ class ActivityController {
                 mSession.stop();
             }
             mTimer.stop();
-            mPumpCadenceDetector.stop();
+            mCadenceDetector.stop();
             if (mZoneField != null) {
                 mZoneField.setData(mZoneSeconds);
             }
@@ -397,7 +399,7 @@ class ActivityController {
                 mSession.stop();
             }
             mTimer.stop();
-            mPumpCadenceDetector.stop();
+            mCadenceDetector.stop();
             mSession.discard();
             mSession = null;
         }
@@ -493,9 +495,12 @@ class ActivityController {
         if (mGoofySpeedField != null) {
             mGoofySpeedField.setData((mSkating && !mRegular) ? speed : 0.0);
         }
-        if (mPumpCadenceField != null) {
-            var cadence = mSkating ? mPumpCadenceDetector.getCadence().toFloat() : 0.0;
-            mPumpCadenceField.setData(cadence);
+        if (mCadenceField != null) {
+            // Not gated on mSkating, unlike skate_speed/regular_speed/etc --
+            // see CadenceDetector's comment: recording this in every state
+            // (walking included) is what makes it usable later as a
+            // labeled dataset against the tags that ARE gated.
+            mCadenceField.setData(mCadenceDetector.getCadence().toFloat());
         }
     }
 

@@ -119,7 +119,7 @@ submission.
 
 `Positioning`, `Fit` (gates `ActivityRecording`), `FitContributor` (gates the
 custom HR-zone-time field), `UserProfile` (gates `getHeartRateZones`), and
-`Sensor` (gates `registerSensorDataListener`, used by `PumpCadenceDetector`
+`Sensor` (gates `registerSensorDataListener`, used by `CadenceDetector`
 for the wrist accelerometer) are all required — the compiler errors
 precisely by symbol if any is missing.
 

@@ -18,6 +18,6 @@
     <string id="GoofySecondsLabel">Goofy Seconds</string>
     <string id="RegularSpeedLabel">Regular Speed</string>
     <string id="GoofySpeedLabel">Goofy Speed</string>
-    <string id="PumpCadenceLabel">Pump Cadence</string>
+    <string id="AccelCadenceLabel">Accel Cadence</string>
     <string id="CadenceUnit">cpm</string>
 </strings>
