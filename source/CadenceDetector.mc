@@ -28,10 +28,13 @@ using Toybox.Lang;
 //
 // PEAK_THRESHOLD_MILLIG below is a rough starting guess, not yet
 // calibrated against real data -- same caveat as ActivityController's
-// gradeAdjustCoefficient. The first real ride recorded under this name
-// (skate-only, gated) showed close to zero correlation between cadence and
-// skate speed, so treat this as a first pass pending retuning, not a
-// validated metric.
+// gradeAdjustCoefficient. Same-second correlation against raw skate speed
+// looked like noise in the first real ride, but that was the wrong check:
+// cadence vs. grade (higher on flat/uphill, lower downhill) and cadence
+// now vs. heart rate ~30s later (peaking around +0.26 on climbs, matching
+// normal HR response lag) both show real structure across two real rides.
+// Treat the threshold as unvalidated still, but the underlying signal
+// looks genuine, not pure noise.
 class CadenceDetector {
 
     private const SAMPLE_RATE_HZ = 25;
@@ -47,8 +50,14 @@ class CadenceDetector {
     private const REFRACTORY_SAMPLES = 6;
     // Cadence is reported as a trailing rolling average over this many
     // one-second buckets, rather than the instantaneous last-second count,
-    // so it doesn't jump around between individual strides/pumps.
-    private const CADENCE_WINDOW_SECONDS = 4;
+    // so it doesn't jump around between individual strides/pumps. Also
+    // sets the output resolution -- each whole peak counted within the
+    // window moves cadence by 60/CADENCE_WINDOW_SECONDS cpm, so widening
+    // this trades responsiveness (how fast cadence reacts to a real change)
+    // for finer steps. Raised from 4 to 8 (15 cpm steps -> 7.5 cpm) after
+    // real ride data showed the coarser steps were clumping together
+    // readings from what were probably genuinely different cadences.
+    private const CADENCE_WINDOW_SECONDS = 8;
 
     private var mBaseline as Lang.Float = 1000.0;
     private var mSamplesSinceLastPeak as Lang.Number = REFRACTORY_SAMPLES;
@@ -141,11 +150,13 @@ class CadenceDetector {
     // Wrist-motion cycles per minute, averaged over the trailing
     // CADENCE_WINDOW_SECONDS. Meaningful in any activity state (walking,
     // skating) -- it's the caller's job to label it, not this class's.
-    function getCadence() as Lang.Number {
+    // Float, not integer division -- truncating here would reintroduce
+    // uneven rounding on top of the window's inherent step size.
+    function getCadence() as Lang.Float {
         var total = 0;
         for (var i = 0; i < CADENCE_WINDOW_SECONDS; i += 1) {
             total += mPeakCountsPerSecond[i] as Lang.Number;
         }
-        return (total * 60) / CADENCE_WINDOW_SECONDS;
+        return (total * 60.0) / CADENCE_WINDOW_SECONDS;
     }
 }

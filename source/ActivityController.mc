@@ -113,7 +113,12 @@ class ActivityController {
     // the FIT field. Recorded in every activity state (not gated on
     // mSkating) -- see CadenceDetector's comment for why: it's meant to
     // become a labeled walk-vs-skate-vs-stance dataset, which requires
-    // data from all of them, not just skating.
+    // data from all of them, not just skating. It IS gated on actual GPS
+    // movement, though (see updateSkateBookkeeping) -- real ride data
+    // showed nonzero cadence readings from arm-jostle noise while fully
+    // stopped, and gating on speed rather than the accelerometer itself
+    // avoids using the noisy sensor to judge its own noise floor.
+    private const MOVING_SPEED_THRESHOLD_MPS = 0.3;
     private var mCadenceDetector as CadenceDetector;
     private var mCadenceField as FitContributor.Field?;
 
@@ -499,8 +504,10 @@ class ActivityController {
             // Not gated on mSkating, unlike skate_speed/regular_speed/etc --
             // see CadenceDetector's comment: recording this in every state
             // (walking included) is what makes it usable later as a
-            // labeled dataset against the tags that ARE gated.
-            mCadenceField.setData(mCadenceDetector.getCadence().toFloat());
+            // labeled dataset against the tags that ARE gated. It IS gated
+            // on actual movement, though -- see MOVING_SPEED_THRESHOLD_MPS.
+            var moving = speed > MOVING_SPEED_THRESHOLD_MPS;
+            mCadenceField.setData(moving ? mCadenceDetector.getCadence() : 0.0);
         }
     }
 
