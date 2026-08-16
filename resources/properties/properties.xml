@@ -1,9 +1,16 @@
 <properties>
     <property id="autoLapEnabled" type="boolean">true</property>
-    <!-- Starting guess for the grade-adjusted-speed multiplier (see
-         ActivityController.updateGradeAndGap()), deliberately steep since
-         caster-based pumping mechanics hit a hard grade ceiling much sooner
-         than running/cycling effort curves do. Meant to be tuned from real
-         ride data via Settings, not treated as a derived constant. -->
-    <property id="gradeAdjustCoefficient" type="float">5.0</property>
+    <!-- Grade-adjusted-speed multiplier (see
+         ActivityController.updateGradeAndGap()). Raised from the original
+         5.0 guess after fitting HR(t+30s) ~ speed + grade against two real
+         rides (skating-only seconds, |grade| outliers beyond 15% dropped as
+         GPS/altitude noise): the fitted coefficient came out around 33-44,
+         well above the settings.xml slider's current max of 20, with grade
+         explaining ~15x more HR variance than speed alone (R^2 0.12 vs
+         0.008). Set to 20 (the slider ceiling) rather than the raw fitted
+         value: the rider only started pumping symmetrically a couple of
+         rides ago, so that estimate likely reflects still-developing
+         technique and should trend down, not up, as it improves. Revisit
+         once more rides are in and the per-ride estimates stop drifting. -->
+    <property id="gradeAdjustCoefficient" type="float">20.0</property>
 </properties>
