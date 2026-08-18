@@ -139,7 +139,7 @@
             chartTitle="@Strings.RegularSpeedLabel"
             dataLabel="@Strings.RegularSpeedLabel"
             unitLabel="@Strings.SpeedUnit"
-            fillColor="#0044CC" />
+            fillColor="#CC0000" />
         <fitField id="11"
             displayInChart="true"
             sortOrder="11"
@@ -147,7 +147,7 @@
             chartTitle="@Strings.GoofySpeedLabel"
             dataLabel="@Strings.GoofySpeedLabel"
             unitLabel="@Strings.SpeedUnit"
-            fillColor="#CC8800" />
+            fillColor="#00CC00" />
         <fitField id="12"
             displayInChart="true"
             sortOrder="12"

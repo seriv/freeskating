@@ -149,13 +149,15 @@ class FreeskateView extends WatchUi.View {
         return skating ? Graphics.COLOR_GREEN : Graphics.COLOR_DK_GRAY;
     }
 
-    // Blue for regular, orange for goofy -- matches the regular_speed/
-    // goofy_speed chart colors in fitContributions.xml, and stays clear of
-    // red/yellow/green already used by the GPS dot. Only set via the
-    // pause-menu ToggleMenuItem (see PauseMenuDelegate), so this is the only
-    // on-screen feedback for which stance is currently tagged.
+    // Red for regular, green for goofy -- mnemonic on the R/G initials,
+    // matches the regular_speed/goofy_speed chart colors in
+    // fitContributions.xml. Reuses hues already used elsewhere (the GPS dot's
+    // red/green, the skate dot's green), but those are separate dots at
+    // separate screen positions, so there's no ambiguity in practice. Only
+    // set via the pause-menu ToggleMenuItem (see PauseMenuDelegate), so this
+    // is the only on-screen feedback for which stance is currently tagged.
     private function stanceColor(regular as Lang.Boolean) as Graphics.ColorType {
-        return regular ? Graphics.COLOR_BLUE : Graphics.COLOR_ORANGE;
+        return regular ? Graphics.COLOR_RED : Graphics.COLOR_GREEN;
     }
 
     private function stateLabel(state as Lang.Number) as Lang.String {
