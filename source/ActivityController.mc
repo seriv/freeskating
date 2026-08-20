@@ -533,11 +533,15 @@ class ActivityController {
             var oldestDistance = distanceHistory[mHistoryIndex] as Lang.Float;
             var oldestAltitude = altitudeHistory[mHistoryIndex] as Lang.Float;
             var distanceDelta = distance - oldestDistance;
-            // Require at least 1m of horizontal movement over the window --
+            // Require at least 5m of horizontal movement over the window --
             // otherwise (near-stopped) the denominator is noise-dominated
             // and would blow the grade estimate up arbitrarily. Keep the
             // last computed value instead of resetting to 0 in that case.
-            if (distanceDelta > 1.0) {
+            // Raised from 1m after a real ride showed grade spikes to
+            // -89%/+58% while near-stationary; every one of those outliers
+            // occurred at a 15s-window distanceDelta under 4.35m, so 5m
+            // covers the observed noise floor with a small margin.
+            if (distanceDelta > 5.0) {
                 mCurrentGradePercent = ((altitude - oldestAltitude) / distanceDelta) * 100.0;
             }
         }
