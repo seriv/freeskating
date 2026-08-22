@@ -21,6 +21,13 @@ using Toybox.Timer;
 //                     they duplicated the lap button; that was most likely
 //                     observed in the desktop simulator, not on real
 //                     hardware, and doesn't hold up under this retest.
+//   Menu (long-press  -> Toggles stance (regular/goofy), independent of the
+//   of Up)               short-press walk tag above -- confirmed this fires
+//                     as its own onMenu() event on a long-press of the same
+//                     physical Up button, not a duplicate of onPreviousPage.
+//                     Also settable via the pause-menu ToggleMenuItem (see
+//                     below) for while PAUSED, when this delegate doesn't
+//                     own input.
 //
 // Mirrors native Garmin activity apps: Select toggles recording/paused, and
 // stopping goes through a pause menu (Resume/Save/Discard) -- like native
@@ -143,7 +150,19 @@ class FreeskateDelegate extends WatchUi.BehaviorDelegate {
         return true;
     }
 
+    // Long-press of the same physical button as onPreviousPage (confirmed on
+    // hardware -- see button mapping comment above), so it's a toggle rather
+    // than a direct set like setSkating()/setStance() -- there's no separate
+    // "regular" and "goofy" button to press instead. That's an acceptable
+    // trade here specifically because stance changes roughly every half-mile
+    // to a mile (see ActivityController), not continuously like skate/walk,
+    // so an uncertain or repeated press is rare and cheap to glance-correct
+    // via the combined dot -- unlike skate/walk, which stays direct-set on
+    // Up/Down precisely because it's pressed far more often and a toggle
+    // there would reintroduce silent mis-tagging.
     function onMenu() as Lang.Boolean {
+        mController.setStance(!mController.getRegularStance());
+        WatchUi.requestUpdate();
         return true;
     }
 

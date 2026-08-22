@@ -94,9 +94,7 @@ class FreeskateView extends WatchUi.View {
 
         dc.setColor(gpsColor(mController.getGpsAccuracy()), Graphics.COLOR_TRANSPARENT);
         dc.fillCircle(centerX - width * 0.12, height * 0.06, height * 0.02);
-        dc.setColor(stanceColor(mController.getRegularStance()), Graphics.COLOR_TRANSPARENT);
-        dc.fillCircle(centerX, height * 0.06, height * 0.02);
-        dc.setColor(skateColor(mController.getCurrentlySkating()), Graphics.COLOR_TRANSPARENT);
+        dc.setColor(skateStanceColor(mController.getCurrentlySkating(), mController.getRegularStance()), Graphics.COLOR_TRANSPARENT);
         dc.fillCircle(centerX + width * 0.12, height * 0.06, height * 0.02);
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
 
@@ -141,22 +139,20 @@ class FreeskateView extends WatchUi.View {
         return Graphics.COLOR_YELLOW;
     }
 
-    // Green while tagged skating (Down button), dark gray while tagged
-    // walking (Up button) -- deliberately not red/yellow, since those
-    // already mean "bad/not-ready" for the GPS dot and "walking" isn't an
-    // error condition.
-    private function skateColor(skating as Lang.Boolean) as Graphics.ColorType {
-        return skating ? Graphics.COLOR_GREEN : Graphics.COLOR_DK_GRAY;
-    }
-
-    // Red for regular, green for goofy -- mnemonic on the R/G initials,
-    // matches the regular_speed/goofy_speed chart colors in
-    // fitContributions.xml. Reuses hues already used elsewhere (the GPS dot's
-    // red/green, the skate dot's green), but those are separate dots at
-    // separate screen positions, so there's no ambiguity in practice. Only
-    // set via the pause-menu ToggleMenuItem (see PauseMenuDelegate), so this
-    // is the only on-screen feedback for which stance is currently tagged.
-    private function stanceColor(regular as Lang.Boolean) as Graphics.ColorType {
+    // Single dot combining the skate/walk tag (Down/Up button) and, while
+    // skating, the stance tag (Up long-press / pause-menu toggle): dark gray
+    // for walking -- deliberately not red/yellow, since those already mean
+    // "bad/not-ready" for the GPS dot and "walking" isn't an error condition
+    // -- else red for regular / green for goofy, a mnemonic on the R/G
+    // initials that also matches the regular_speed/goofy_speed chart colors
+    // in fitContributions.xml. Stance only applies while skating (see
+    // ActivityController), so this dot never needs to show both tags at
+    // once -- skating collapses to exactly one of the two colors already
+    // used for stance.
+    private function skateStanceColor(skating as Lang.Boolean, regular as Lang.Boolean) as Graphics.ColorType {
+        if (!skating) {
+            return Graphics.COLOR_DK_GRAY;
+        }
         return regular ? Graphics.COLOR_RED : Graphics.COLOR_GREEN;
     }
 
