@@ -35,6 +35,17 @@ using Toybox.Lang;
 // normal HR response lag) both show real structure across two real rides.
 // Treat the threshold as unvalidated still, but the underlying signal
 // looks genuine, not pure noise.
+//
+// Also derives a per-second roughness estimate from the same raw stream --
+// RMS of sample-to-sample magnitude deltas, which isolates high-frequency
+// jitter (wheel/truck chatter transmitted up through the body) from the
+// much slower (~1-3Hz) swing motion cadence is built to detect, the same
+// way frame-differencing rejects a slowly-varying signal in favor of its
+// fast component. Entirely uncalibrated -- recorded so a future ride with
+// a known smooth/rough transition can show whether this actually tracks
+// surface quality, or is just noise, before anything is built on top of
+// it. A wrist accelerometer is a weak, damped proxy for what the wheels
+// feel (same caveat as pump cadence above), so it may not track at all.
 class CadenceDetector {
 
     private const SAMPLE_RATE_HZ = 25;
@@ -58,22 +69,34 @@ class CadenceDetector {
     // real ride data showed the coarser steps were clumping together
     // readings from what were probably genuinely different cadences.
     private const CADENCE_WINDOW_SECONDS = 8;
+    // Roughness gets its own, shorter window -- a surface transition (smooth
+    // to broken pavement) is a near-instant change, unlike cadence which is
+    // inherently a multi-cycle rate. Unvalidated guess, same as everything
+    // else in this class; easy to widen later if the per-second value looks
+    // too noisy against real data.
+    private const ROUGHNESS_WINDOW_SECONDS = 4;
 
     private var mBaseline as Lang.Float = 1000.0;
     private var mSamplesSinceLastPeak as Lang.Number = REFRACTORY_SAMPLES;
     private var mPeakCountsPerSecond as Lang.Array<Lang.Number?>;
     private var mPeakCountsIndex as Lang.Number = 0;
     private var mCurrentSecondPeaks as Lang.Number = 0;
+    private var mPrevMagnitude as Lang.Float?;
+    private var mRoughnessSumSquares as Lang.Float = 0.0;
+    private var mRoughnessSampleCount as Lang.Number = 0;
+    private var mRoughnessPerSecond as Lang.Array<Lang.Float?>;
+    private var mRoughnessIndex as Lang.Number = 0;
     private var mEnabled as Lang.Boolean = false;
 
     function initialize() {
         mPeakCountsPerSecond = new [CADENCE_WINDOW_SECONDS];
+        mRoughnessPerSecond = new [ROUGHNESS_WINDOW_SECONDS];
         reset();
     }
 
     // Called from ActivityController.start(), same as the other per-ride
     // accumulators -- clears out any trailing window data from a previous
-    // ride so cadence doesn't start artificially high.
+    // ride so cadence/roughness don't start artificially high.
     function reset() as Void {
         mBaseline = 1000.0;
         mSamplesSinceLastPeak = REFRACTORY_SAMPLES;
@@ -81,6 +104,13 @@ class CadenceDetector {
         mPeakCountsIndex = 0;
         for (var i = 0; i < CADENCE_WINDOW_SECONDS; i += 1) {
             mPeakCountsPerSecond[i] = 0;
+        }
+        mPrevMagnitude = null;
+        mRoughnessSumSquares = 0.0;
+        mRoughnessSampleCount = 0;
+        mRoughnessIndex = 0;
+        for (var i = 0; i < ROUGHNESS_WINDOW_SECONDS; i += 1) {
+            mRoughnessPerSecond[i] = 0.0;
         }
     }
 
@@ -139,12 +169,32 @@ class CadenceDetector {
                 mCurrentSecondPeaks += 1;
                 mSamplesSinceLastPeak = 0;
             }
+            // Sample-to-sample delta rather than deviation from mBaseline --
+            // the baseline follows swing motion too (that's the point of it
+            // for cadence), so a delta against it would net out the very
+            // high-frequency jitter this is trying to isolate. The first
+            // sample after reset()/start() has no prior sample to diff
+            // against and is skipped.
+            if (mPrevMagnitude != null) {
+                var delta = magnitude - (mPrevMagnitude as Lang.Float);
+                mRoughnessSumSquares += delta * delta;
+                mRoughnessSampleCount += 1;
+            }
+            mPrevMagnitude = magnitude;
         }
         // One callback batch corresponds to one SENSOR_PERIOD_SECONDS
         // bucket -- advance the rolling window by exactly one slot.
         mPeakCountsPerSecond[mPeakCountsIndex] = mCurrentSecondPeaks;
         mPeakCountsIndex = (mPeakCountsIndex + 1) % CADENCE_WINDOW_SECONDS;
         mCurrentSecondPeaks = 0;
+
+        var rms = (mRoughnessSampleCount > 0)
+            ? Math.sqrt(mRoughnessSumSquares / mRoughnessSampleCount)
+            : 0.0;
+        mRoughnessPerSecond[mRoughnessIndex] = rms;
+        mRoughnessIndex = (mRoughnessIndex + 1) % ROUGHNESS_WINDOW_SECONDS;
+        mRoughnessSumSquares = 0.0;
+        mRoughnessSampleCount = 0;
     }
 
     // Wrist-motion cycles per minute, averaged over the trailing
@@ -158,5 +208,17 @@ class CadenceDetector {
             total += mPeakCountsPerSecond[i] as Lang.Number;
         }
         return (total * 60.0) / CADENCE_WINDOW_SECONDS;
+    }
+
+    // Milli-G, averaged over the trailing ROUGHNESS_WINDOW_SECONDS. Higher
+    // means more high-frequency jitter in the raw accelerometer signal --
+    // hoped to track surface roughness, but see the class comment: entirely
+    // unvalidated against real ride data so far.
+    function getRoughness() as Lang.Float {
+        var total = 0.0;
+        for (var i = 0; i < ROUGHNESS_WINDOW_SECONDS; i += 1) {
+            total += mRoughnessPerSecond[i] as Lang.Float;
+        }
+        return total / ROUGHNESS_WINDOW_SECONDS;
     }
 }

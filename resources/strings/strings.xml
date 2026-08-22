@@ -20,4 +20,6 @@
     <string id="GoofySpeedLabel">Goofy Speed</string>
     <string id="AccelCadenceLabel">Accel Cadence</string>
     <string id="CadenceUnit">cpm</string>
+    <string id="AccelRoughnessLabel">Accel Roughness</string>
+    <string id="MilliGUnit">mG</string>
 </strings>

@@ -59,6 +59,15 @@
     grade_adjusted_speed for the same reason: building up a dataset to
     look at from real rides, since the detector's peak threshold is an
     unvalidated starting guess.
+
+    accel_roughness (id 13) is MESG_TYPE_RECORD, from the same detector and
+    on the same movement gate/lifecycle as accel_cadence: an RMS-of-
+    sample-to-sample-delta estimate meant to isolate high-frequency
+    accelerometer jitter (hoped: wheel/truck chatter transmitted through
+    the body) from the slower swing motion cadence tracks. Entirely
+    uncalibrated: recorded purely so a ride with a known smooth/rough
+    surface transition can show whether this tracks anything real before
+    any threshold or classification is built on top of it.
 -->
 <resources xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
     <fitContributions>
@@ -156,5 +165,13 @@
             dataLabel="@Strings.AccelCadenceLabel"
             unitLabel="@Strings.CadenceUnit"
             fillColor="#00CCCC" />
+        <fitField id="13"
+            displayInChart="true"
+            sortOrder="13"
+            precision="1"
+            chartTitle="@Strings.AccelRoughnessLabel"
+            dataLabel="@Strings.AccelRoughnessLabel"
+            unitLabel="@Strings.MilliGUnit"
+            fillColor="#FFCC00" />
     </fitContributions>
 </resources>
