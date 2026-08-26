@@ -8,6 +8,10 @@
         minSdkVersion="5.0.1">
         <iq:products>
             <iq:product id="enduro3"/>
+            <iq:product id="fenix7x"/>
+            <iq:product id="fenix7xpro"/>
+            <iq:product id="fenix7xpronowifi"/>
+            <iq:product id="fenix8solar51mm"/>
         </iq:products>
         <iq:permissions>
             <iq:uses-permission id="Positioning"/>
