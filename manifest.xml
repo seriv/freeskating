@@ -12,6 +12,13 @@
             <iq:product id="fenix7xpro"/>
             <iq:product id="fenix7xpronowifi"/>
             <iq:product id="fenix8solar51mm"/>
+            <iq:product id="fr255s"/>
+            <iq:product id="fr255sm"/>
+            <iq:product id="fr255"/>
+            <iq:product id="fr255m"/>
+            <iq:product id="instinct3amoled45mm"/>
+            <iq:product id="instinctcrossoveramoled"/>
+            <iq:product id="instinct3amoled50mm"/>
         </iq:products>
         <iq:permissions>
             <iq:uses-permission id="Positioning"/>
