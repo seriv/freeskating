@@ -121,10 +121,6 @@ class ActivityController {
     private const MOVING_SPEED_THRESHOLD_MPS = 0.3;
     private var mCadenceDetector as CadenceDetector;
     private var mCadenceField as FitContributor.Field?;
-    // Uncalibrated surface-roughness estimate, same detector/lifecycle/
-    // movement-gate as accel_cadence above -- see CadenceDetector's class
-    // comment for what it measures and why it's unvalidated so far.
-    private var mRoughnessField as FitContributor.Field?;
 
     function initialize() {
         // Garmin-configured zones, not hardcoded thresholds -- boundaries are
@@ -326,12 +322,6 @@ class ActivityController {
                 FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "cpm" }
             );
-            mRoughnessField = mSession.createField(
-                "accel_roughness",
-                13,
-                FitContributor.DATA_TYPE_FLOAT,
-                { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "mG" }
-            );
         }
 
         if (mSession != null) {
@@ -518,9 +508,6 @@ class ActivityController {
             // labeled dataset against the tags that ARE gated. It IS gated
             // on actual movement, though -- see MOVING_SPEED_THRESHOLD_MPS.
             mCadenceField.setData(moving ? mCadenceDetector.getCadence() : 0.0);
-        }
-        if (mRoughnessField != null) {
-            mRoughnessField.setData(moving ? mCadenceDetector.getRoughness() : 0.0);
         }
     }
 

@@ -60,14 +60,12 @@
     look at from real rides, since the detector's peak threshold is an
     unvalidated starting guess.
 
-    accel_roughness (id 13) is MESG_TYPE_RECORD, from the same detector and
-    on the same movement gate/lifecycle as accel_cadence: an RMS-of-
-    sample-to-sample-delta estimate meant to isolate high-frequency
-    accelerometer jitter (hoped: wheel/truck chatter transmitted through
-    the body) from the slower swing motion cadence tracks. Entirely
-    uncalibrated: recorded purely so a ride with a known smooth/rough
-    surface transition can show whether this tracks anything real before
-    any threshold or classification is built on top of it.
+    accel_roughness (id 13, formerly used here) was dropped after real-ride
+    validation: it tracked accel_cadence/pumping effort far more than
+    surface texture (direction-of-travel-controlled analysis showed the
+    correlation was ~entirely explained by cadence), and the rider's newer
+    freeskates made the original rough-surface problem it was meant to
+    detect no longer relevant anyway. id 13 is retired, not reused.
 -->
 <resources xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
     <fitContributions>
@@ -165,13 +163,5 @@
             dataLabel="@Strings.AccelCadenceLabel"
             unitLabel="@Strings.CadenceUnit"
             fillColor="#00CCCC" />
-        <fitField id="13"
-            displayInChart="true"
-            sortOrder="13"
-            precision="1"
-            chartTitle="@Strings.AccelRoughnessLabel"
-            dataLabel="@Strings.AccelRoughnessLabel"
-            unitLabel="@Strings.MilliGUnit"
-            fillColor="#FFCC00" />
     </fitContributions>
 </resources>
