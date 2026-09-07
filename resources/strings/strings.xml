@@ -20,4 +20,5 @@
     <string id="GoofySpeedLabel">Goofy Speed</string>
     <string id="AccelCadenceLabel">Accel Cadence</string>
     <string id="CadenceUnit">cpm</string>
+    <string id="DistanceStallSecondsLabel">Distance Stall Seconds</string>
 </strings>

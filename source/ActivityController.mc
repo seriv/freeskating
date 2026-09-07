@@ -7,6 +7,7 @@ using Toybox.Timer;
 using Toybox.Lang;
 using Toybox.System;
 using Toybox.Application.Properties;
+using Toybox.Attention;
 
 // Owns the recording Session lifecycle, HR-zone time accounting, and the
 // custom FitContributor field. View/Delegate only ever call these methods.
@@ -122,6 +123,21 @@ class ActivityController {
     private var mCadenceDetector as CadenceDetector;
     private var mCadenceField as FitContributor.Field?;
 
+    // Detects the platform-level GPS-distance-accumulator stall documented
+    // in project notes: Activity.Info.elapsedDistance can freeze solid for
+    // anywhere from seconds to tens of minutes while position/speed/HR keep
+    // updating normally -- a Garmin firmware bug, not something this class
+    // can prevent. Confirmed across 43 real rides: ~66% of stall episodes
+    // clear on their own within 56s or less; every stall that ran longer
+    // than that has needed a manual pause/resume to unstick, so
+    // DISTANCE_STALL_ALERT_SECONDS is set just above that self-recovery
+    // ceiling -- the alert only fires for stalls that actually seem to need
+    // the rider's help, not the common short self-clearing ones.
+    private const DISTANCE_STALL_ALERT_SECONDS = 60;
+    private var mStallSeconds as Lang.Number = 0;
+    private var mTotalStallSeconds as Lang.Number = 0;
+    private var mDistanceStallField as FitContributor.Field?;
+
     function initialize() {
         // Garmin-configured zones, not hardcoded thresholds -- boundaries are
         // [min1, max1, max2, max3, max4, max5] in bpm.
@@ -229,11 +245,18 @@ class ActivityController {
             mRegularSeconds = 0;
             mGoofySeconds = 0;
             mRegularDistanceMeters = 0.0;
+            mStallSeconds = 0;
+            mTotalStallSeconds = 0;
             mCadenceDetector.reset();
 
+            // SPORT_INLINE_SKATING, not SPORT_GENERIC -- freeskating is
+            // mechanically much closer to inline skating than to a generic/
+            // "Other" activity, and generic-profile GPS-distance fusion is
+            // suspected (unconfirmed) to be less robust, per the
+            // distance-stall investigation above.
             mSession = Recording.createSession({
                 :name => "Freeskate",
-                :sport => Recording.SPORT_GENERIC,
+                :sport => Recording.SPORT_INLINE_SKATING,
                 :subSport => Recording.SUB_SPORT_GENERIC
             });
 
@@ -322,6 +345,14 @@ class ActivityController {
                 FitContributor.DATA_TYPE_FLOAT,
                 { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "cpm" }
             );
+            // id 13 is permanently retired (formerly accel_roughness, see
+            // fitContributions.xml) -- this is 14, not 13.
+            mDistanceStallField = mSession.createField(
+                "distance_stall_seconds",
+                14,
+                FitContributor.DATA_TYPE_FLOAT,
+                { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s" }
+            );
         }
 
         if (mSession != null) {
@@ -392,6 +423,9 @@ class ActivityController {
             if (mGoofyField != null) {
                 mGoofyField.setData(mGoofySeconds);
             }
+            if (mDistanceStallField != null) {
+                mDistanceStallField.setData(mTotalStallSeconds);
+            }
             mSession.save();
             mSession = null;
         }
@@ -460,6 +494,7 @@ class ActivityController {
                     mRegularDistanceMeters += delta;
                 }
             }
+            updateDistanceStall(delta, speed);
             mPreviousDistanceMeters = currentDistance;
         }
 
@@ -508,6 +543,43 @@ class ActivityController {
             // labeled dataset against the tags that ARE gated. It IS gated
             // on actual movement, though -- see MOVING_SPEED_THRESHOLD_MPS.
             mCadenceField.setData(moving ? mCadenceDetector.getCadence() : 0.0);
+        }
+    }
+
+    // Tracks consecutive seconds of "moving per the speed field, but
+    // elapsedDistance didn't advance" -- the signature of the platform
+    // stall (see the comment on DISTANCE_STALL_ALERT_SECONDS above).
+    // Gated on MOVING_SPEED_THRESHOLD_MPS, same as cadence, so a real stop
+    // (traffic light, catching breath) is never mistaken for a stall.
+    // mTotalStallSeconds accumulates across the whole ride for the FIT
+    // field regardless of the alert threshold; mStallSeconds is just the
+    // current streak, reset the instant distance moves again.
+    private function updateDistanceStall(delta as Lang.Float, speed as Lang.Float) as Void {
+        if (speed > MOVING_SPEED_THRESHOLD_MPS && delta <= 0.0) {
+            mStallSeconds += 1;
+            mTotalStallSeconds += 1;
+            if (mStallSeconds >= DISTANCE_STALL_ALERT_SECONDS && mStallSeconds % DISTANCE_STALL_ALERT_SECONDS == 0) {
+                alertDistanceStall();
+            }
+        } else {
+            mStallSeconds = 0;
+        }
+        if (mDistanceStallField != null) {
+            mDistanceStallField.setData(mTotalStallSeconds);
+        }
+    }
+
+    // Re-fires every DISTANCE_STALL_ALERT_SECONDS while the stall
+    // continues, in case the rider misses the first buzz -- cheap
+    // insurance since it can only repeat while genuinely still stalled
+    // (updateDistanceStall resets the streak the moment distance resumes).
+    private function alertDistanceStall() as Void {
+        if (Attention has :vibrate) {
+            Attention.vibrate([
+                new Attention.VibeProfile(50, 500),
+                new Attention.VibeProfile(0, 250),
+                new Attention.VibeProfile(50, 500)
+            ]);
         }
     }
 

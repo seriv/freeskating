@@ -66,6 +66,15 @@
     correlation was ~entirely explained by cadence), and the rider's newer
     freeskates made the original rough-surface problem it was meant to
     detect no longer relevant anyway. id 13 is retired, not reused.
+
+    distance_stall_seconds (id 14) is MESG_TYPE_SESSION, a single
+    cumulative total for the whole ride: total seconds where the platform's
+    own elapsedDistance froze while the rider was still moving (see
+    ActivityController.mc's DISTANCE_STALL_ALERT_SECONDS comment for the
+    full story, a confirmed Garmin firmware GPS-distance-fusion bug, not
+    something this app causes). displayInActivitySummary fits it the same
+    way as skate_seconds/other_seconds: one final number per ride, not a
+    time series.
 -->
 <resources xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
     <fitContributions>
@@ -163,5 +172,11 @@
             dataLabel="@Strings.AccelCadenceLabel"
             unitLabel="@Strings.CadenceUnit"
             fillColor="#00CCCC" />
+        <fitField id="14"
+            displayInActivitySummary="true"
+            sortOrder="13"
+            precision="0"
+            dataLabel="@Strings.DistanceStallSecondsLabel"
+            unitLabel="@Strings.SecondsUnit" />
     </fitContributions>
 </resources>
