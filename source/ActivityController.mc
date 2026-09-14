@@ -546,23 +546,40 @@ class ActivityController {
         }
     }
 
-    // Tracks consecutive seconds of "moving per the speed field, but
-    // elapsedDistance didn't advance" -- the signature of the platform
-    // stall (see the comment on DISTANCE_STALL_ALERT_SECONDS above).
-    // Gated on MOVING_SPEED_THRESHOLD_MPS, same as cadence, so a real stop
-    // (traffic light, catching breath) is never mistaken for a stall.
-    // mTotalStallSeconds accumulates across the whole ride for the FIT
-    // field regardless of the alert threshold; mStallSeconds is just the
-    // current streak, reset the instant distance moves again.
+    // Tracks consecutive seconds elapsedDistance hasn't advanced -- the
+    // signature of the platform stall (see the comment on
+    // DISTANCE_STALL_ALERT_SECONDS above). mTotalStallSeconds accumulates
+    // across the whole ride for the FIT field regardless of the alert
+    // threshold; mStallSeconds is just the current streak.
+    //
+    // The streak only RESETS on delta > 0.0 -- confirmed real distance
+    // progress. An earlier version reset it on any tick where
+    // speed <= MOVING_SPEED_THRESHOLD_MPS, on the theory that a real stop
+    // looks the same as a stall's momentary noise; replayed against a
+    // real 19-minute stall (2026-09-14), that fragmented one continuous
+    // freeze into ~150 sub-60s streaks, because ordinary stride-to-stride
+    // speed noise dips below the threshold for a second here and there
+    // even during continuous skating, and the old code treated every one
+    // of those dips as proof the stall had ended.
+    //
+    // This version instead only INCREMENTS the streak (and the total) on
+    // ticks that look like the stall signature (distance frozen, speed
+    // still indicating motion); a tick that looks like a genuine stop
+    // (distance frozen AND speed near zero) neither adds to nor resets the
+    // streak, it's just skipped. Replayed against the same real stall,
+    // this recognizes it as one unbroken ~1030s streak (vs. the old
+    // per-tick version's fragments) while still not accumulating anything
+    // during actual rest stops, and the total nearly exactly matches an
+    // independent GPS-haversine reconstruction of the same ride.
     private function updateDistanceStall(delta as Lang.Float, speed as Lang.Float) as Void {
-        if (speed > MOVING_SPEED_THRESHOLD_MPS && delta <= 0.0) {
+        if (delta > 0.0) {
+            mStallSeconds = 0;
+        } else if (speed > MOVING_SPEED_THRESHOLD_MPS) {
             mStallSeconds += 1;
             mTotalStallSeconds += 1;
             if (mStallSeconds >= DISTANCE_STALL_ALERT_SECONDS && mStallSeconds % DISTANCE_STALL_ALERT_SECONDS == 0) {
                 alertDistanceStall();
             }
-        } else {
-            mStallSeconds = 0;
         }
         if (mDistanceStallField != null) {
             mDistanceStallField.setData(mTotalStallSeconds);
